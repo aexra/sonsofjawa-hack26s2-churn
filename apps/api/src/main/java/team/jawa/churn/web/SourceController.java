@@ -2,17 +2,23 @@ package team.jawa.churn.web;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
 import team.jawa.churn.api.generated.model.IngestLogPage;
 import team.jawa.churn.api.generated.model.IngestResult;
 import team.jawa.churn.api.generated.model.IngestResultApplied;
@@ -25,6 +31,7 @@ import team.jawa.churn.ingest.Actor;
 import team.jawa.churn.ingest.IngestFormat;
 import team.jawa.churn.ingest.IngestProperties;
 import team.jawa.churn.ingest.IngestService;
+import team.jawa.churn.ingest.SnapshotService;
 import team.jawa.churn.ingest.SourceEntity;
 import team.jawa.churn.ingest.SourceReader;
 import team.jawa.churn.recalc.RecalcScheduler;
@@ -38,12 +45,19 @@ class SourceController {
     private static final int MAX_IDS = 500;
 
     private final IngestService ingest;
+    private final SnapshotService snapshots;
     private final SourceReader reader;
     private final IngestProperties properties;
     private final UserRepository users;
 
-    SourceController(IngestService ingest, SourceReader reader, IngestProperties properties, UserRepository users) {
+    SourceController(
+            IngestService ingest,
+            SnapshotService snapshots,
+            SourceReader reader,
+            IngestProperties properties,
+            UserRepository users) {
         this.ingest = ingest;
+        this.snapshots = snapshots;
         this.reader = reader;
         this.properties = properties;
         this.users = users;
@@ -59,6 +73,25 @@ class SourceController {
                         "content type must be application/json or text/csv"));
         IngestService.Outcome outcome = ingest.upsert(target, format, body(request), actor());
         return ResponseEntity.ok(result(outcome));
+    }
+
+    @PutMapping("/snapshot")
+    ResponseEntity<IngestResult> snapshot(HttpServletRequest request) throws IOException {
+        MediaType media = mediaType(request.getContentType());
+        if (media != null && MediaType.APPLICATION_JSON.equalsTypeAndSubtype(media)) {
+            return ResponseEntity.ok(snapshotResult(snapshots.replaceJson(body(request), actor())));
+        }
+        if (media != null && MediaType.MULTIPART_FORM_DATA.equalsTypeAndSubtype(media)) {
+            if (!(request instanceof MultipartHttpServletRequest multipart)) {
+                throw unsupportedSnapshot();
+            }
+            return ResponseEntity.ok(snapshotResult(snapshots.replaceCsv(
+                    part(multipart, "accounts"),
+                    part(multipart, "services"),
+                    part(multipart, "transactions"),
+                    actor())));
+        }
+        throw unsupportedSnapshot();
     }
 
     @GetMapping("/{entity}")
@@ -125,6 +158,36 @@ class SourceController {
                 HttpStatus.CONTENT_TOO_LARGE, "payload_too_large", "request body is limited to " + limit + " bytes");
     }
 
+    private static MediaType mediaType(String contentType) {
+        if (contentType == null) {
+            return null;
+        }
+        try {
+            return MediaType.parseMediaType(contentType);
+        } catch (InvalidMediaTypeException e) {
+            return null;
+        }
+    }
+
+    private static ApiException unsupportedSnapshot() {
+        return new ApiException(
+                HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "unsupported_media_type",
+                "content type must be application/json or multipart/form-data");
+    }
+
+    private static byte[] part(MultipartHttpServletRequest request, String name) throws IOException {
+        MultipartFile file = request.getFile(name);
+        if (file != null) {
+            return file.getBytes();
+        }
+        String text = request.getParameter(name);
+        if (text != null) {
+            return text.getBytes(StandardCharsets.UTF_8);
+        }
+        return null;
+    }
+
     private Actor actor() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Object principal = authentication == null ? null : authentication.getPrincipal();
@@ -151,6 +214,25 @@ class SourceController {
         return new IngestResult(
                         IngestResult.ModeEnum.UPSERT,
                         IngestResult.EntityEnum.fromValue(outcome.entity().path()),
+                        IngestResult.FormatEnum.fromValue(outcome.format().value()),
+                        outcome.rowsReceived(),
+                        outcome.rowsApplied(),
+                        new RecalcAccepted(state))
+                .logId(outcome.logId())
+                .applied(applied);
+    }
+
+    private static IngestResult snapshotResult(SnapshotService.Outcome outcome) {
+        IngestResultApplied applied = new IngestResultApplied();
+        applied.accounts(outcome.accounts());
+        applied.services(outcome.services());
+        applied.transactions(outcome.transactions());
+        RecalcAccepted.StateEnum state = outcome.recalc() == RecalcScheduler.State.SCHEDULED
+                ? RecalcAccepted.StateEnum.SCHEDULED
+                : RecalcAccepted.StateEnum.COALESCED;
+        return new IngestResult(
+                        IngestResult.ModeEnum.SNAPSHOT,
+                        IngestResult.EntityEnum.SNAPSHOT,
                         IngestResult.FormatEnum.fromValue(outcome.format().value()),
                         outcome.rowsReceived(),
                         outcome.rowsApplied(),

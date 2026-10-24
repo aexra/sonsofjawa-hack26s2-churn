@@ -172,7 +172,7 @@ public class IngestService {
         }
     }
 
-    private List<Map<String, Object>> readCsv(SourceEntity entity, byte[] body) {
+    List<Map<String, Object>> readCsv(SourceEntity entity, byte[] body) {
         String text;
         try {
             text = StandardCharsets.UTF_8
