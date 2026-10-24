@@ -3,6 +3,7 @@ import { Controller } from 'react-hook-form';
 import { ClockEditor } from '@/features/model-clock-edit';
 import { describeImpact, PreviewCard, useModelPreview } from '@/features/model-preview';
 import {
+  ReadOnlyBar,
   SettingsBar,
   UnsavedChangesGuard,
   useSettingsEditor,
@@ -53,9 +54,7 @@ export function SettingsForm({ settings, canEdit }: SettingsFormProps) {
           <UnsavedChangesGuard dirty={editor.dirty} />
         </>
       ) : (
-        <p role="note" className="m-0 rounded-sm bg-surface-sunken px-3 py-2.5 text-ink-muted">
-          {ru.model.readOnly}
-        </p>
+        <ReadOnlyBar settings={settings} />
       )}
       {editor.externalChange && (
         <div
@@ -85,17 +84,6 @@ export function SettingsForm({ settings, canEdit }: SettingsFormProps) {
         />
         <div className="flex min-w-0 flex-col gap-4">
           {canEdit && <PreviewCard state={preview} outsidePreview={outsidePreview} />}
-          <ThresholdsCard
-            settings={groupSettings(baseline, 'levels')}
-            control={form.control}
-            draft={draft.values}
-            disabled={disabled}
-          />
-          <HorizonCard
-            settings={groupSettings(baseline, 'horizon', 'quality')}
-            control={form.control}
-            disabled={disabled}
-          />
           <Controller
             control={form.control}
             name="clock"
@@ -112,6 +100,19 @@ export function SettingsForm({ settings, canEdit }: SettingsFormProps) {
             )}
           />
         </div>
+      </div>
+      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <ThresholdsCard
+          settings={groupSettings(baseline, 'levels')}
+          control={form.control}
+          draft={draft.values}
+          disabled={disabled}
+        />
+        <HorizonCard
+          settings={groupSettings(baseline, 'horizon', 'quality')}
+          control={form.control}
+          disabled={disabled}
+        />
       </div>
     </form>
   );

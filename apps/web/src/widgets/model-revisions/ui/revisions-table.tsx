@@ -12,7 +12,7 @@ export function RevisionsTable({ settings }: { settings: ModelSettings }) {
   const { data, isPending, isError } = useModelRevisions();
   return (
     <section aria-labelledby="model-revisions-title" className="flex flex-col gap-3">
-      <h2 id="model-revisions-title" className="m-0 font-display text-heading">
+      <h2 id="model-revisions-title" className="m-0 font-display text-section">
         {ru.model.revisions.title}
       </h2>
       {isPending && <Skeleton className="h-24" />}
@@ -30,8 +30,11 @@ export function RevisionsTable({ settings }: { settings: ModelSettings }) {
                 key: 'version',
                 label: ru.model.revisions.version,
                 align: 'right',
-                mono: true,
-                render: (revision) => revision.version,
+                render: (revision) => (
+                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-xs bg-accent-soft px-1.5 font-mono text-label text-accent tabular-nums">
+                    {revision.version}
+                  </span>
+                ),
               },
               {
                 key: 'when',

@@ -42,7 +42,7 @@ export function ClockEditor({
   return (
     <section
       aria-labelledby={titleId}
-      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4"
+      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-5"
     >
       <h2 id={titleId} className="m-0 font-display text-heading">
         {ru.model.clock.title}

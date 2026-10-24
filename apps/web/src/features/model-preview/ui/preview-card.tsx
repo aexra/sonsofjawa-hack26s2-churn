@@ -62,8 +62,8 @@ function Body({ state }: Pick<PreviewCardProps, 'state'>) {
             rowKey={(row) => String(row.id)}
             isChanged={(row) => row.levelBefore !== row.levelAfter}
           />
-          <div className="flex justify-between gap-3">
-            <span>{ru.model.preview.expectedLoss}</span>
+          <div className="flex items-baseline justify-between gap-3 rounded-sm bg-surface-sunken px-3.5 py-3">
+            <span className="text-body-strong">{ru.model.preview.expectedLoss}</span>
             <span className="font-mono text-data whitespace-nowrap tabular-nums">
               {formatMoney(preview.lossBefore)} →{' '}
               <b className="font-semibold">{formatMoney(preview.lossAfter)}</b>
@@ -79,7 +79,7 @@ export function PreviewCard({ state, outsidePreview }: PreviewCardProps) {
   return (
     <section
       aria-labelledby="model-preview-title"
-      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4"
+      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-5"
     >
       <h2 id="model-preview-title" className="m-0 font-display text-heading">
         {ru.model.preview.title}

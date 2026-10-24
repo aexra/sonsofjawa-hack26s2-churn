@@ -30,8 +30,8 @@ function WeightRow({ setting, control, formula, total, changed, disabled }: Weig
       render={({ field, fieldState }) => {
         const share = total > 0 && Number.isFinite(field.value) ? field.value / total : null;
         return (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b border-line py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_4.5rem]">
-            <div className="col-span-2 flex min-w-0 flex-col gap-0.5 md:col-span-1">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-line py-3.5 first:border-t-0">
+            <div className="flex min-w-0 flex-[1_1_16rem] flex-col gap-0.5">
               <span className="flex items-center gap-1.5 text-body-strong">
                 {setting.title}
                 {changed && (
@@ -58,35 +58,41 @@ function WeightRow({ setting, control, formula, total, changed, disabled }: Weig
                 {ru.model.weights.defaultValue(formatNumber(setting.defaultValue))}
               </span>
             </div>
-            <Slider
-              label={setting.title}
-              value={field.value}
-              min={setting.min}
-              max={setting.max}
-              disabled={disabled}
-              onValueChange={field.onChange}
-            />
-            <Input
-              type="number"
-              inputMode="decimal"
-              mono
-              aria-label={ru.model.weights.inputLabel(setting.title)}
-              className="w-20 text-right"
-              min={setting.min}
-              max={setting.max}
-              disabled={disabled}
-              invalid={Boolean(fieldState.error)}
-              name={field.name}
-              ref={field.ref}
-              onBlur={field.onBlur}
-              value={displayNumber(field.value)}
-              onChange={(event) => field.onChange(parseNumber(event.target.value))}
-            />
-            <span className="col-span-full text-caption text-ink-muted tabular-nums md:col-span-1 md:text-right">
-              {share === null ? ru.common.emptyValue : ru.model.weights.share(formatPercent(share))}
-            </span>
+            <div className="flex min-w-0 flex-[1_1_13rem] items-center gap-3.5">
+              <div className="grid min-w-0 flex-1">
+                <Slider
+                  label={setting.title}
+                  value={field.value}
+                  min={setting.min}
+                  max={setting.max}
+                  disabled={disabled}
+                  onValueChange={field.onChange}
+                />
+              </div>
+              <Input
+                type="number"
+                inputMode="decimal"
+                mono
+                aria-label={ru.model.weights.inputLabel(setting.title)}
+                className="w-16 text-center"
+                min={setting.min}
+                max={setting.max}
+                disabled={disabled}
+                invalid={Boolean(fieldState.error)}
+                name={field.name}
+                ref={field.ref}
+                onBlur={field.onBlur}
+                value={displayNumber(field.value)}
+                onChange={(event) => field.onChange(parseNumber(event.target.value))}
+              />
+              <span className="inline-flex h-6 min-w-19 shrink-0 items-center justify-center rounded-xs bg-accent-soft px-2 font-mono text-label text-accent tabular-nums">
+                {share === null
+                  ? ru.common.emptyValue
+                  : ru.model.weights.share(formatPercent(share))}
+              </span>
+            </div>
             {fieldState.error && (
-              <span className="col-span-full text-caption text-negative">
+              <span className="basis-full text-caption text-negative">
                 {fieldState.error.message}
               </span>
             )}
@@ -123,7 +129,7 @@ export function WeightsCard({
   return (
     <section
       aria-labelledby="model-weights-title"
-      className="flex min-w-0 flex-col gap-1 rounded-md border border-line bg-surface p-4"
+      className="flex min-w-0 flex-col gap-1 rounded-md border border-line bg-surface p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id="model-weights-title" className="m-0 font-display text-heading">
@@ -138,7 +144,7 @@ export function WeightsCard({
           {error}
         </p>
       )}
-      <div className="flex flex-col">
+      <div className="mt-2 flex flex-col">
         {settings.map((setting) => (
           <WeightRow
             key={setting.key}

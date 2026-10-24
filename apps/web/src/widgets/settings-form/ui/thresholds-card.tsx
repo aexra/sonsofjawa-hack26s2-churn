@@ -18,7 +18,7 @@ function Scale({ medium, high }: { medium: number; high: number }) {
         <span className="bg-risk-medium-fill" style={{ flex: high - medium }} />
         <span className="bg-risk-high" style={{ flex: 100 - high }} />
       </div>
-      <div className="flex justify-between text-caption text-ink-muted">
+      <div className="flex justify-between font-mono text-caption text-ink-muted">
         <span>{`0 · ${ru.model.levels.low}`}</span>
         <span>{`${formatNumber(medium)} · ${ru.model.levels.medium}`}</span>
         <span>{`${formatNumber(high)} · ${ru.model.levels.high}`}</span>
@@ -49,12 +49,12 @@ export function ThresholdsCard({ settings, control, draft, disabled }: Threshold
   return (
     <section
       aria-labelledby="model-levels-title"
-      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4"
+      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-5"
     >
       <h2 id="model-levels-title" className="m-0 font-display text-heading">
         {ru.model.levels.title}
       </h2>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-x-4 gap-y-3">
+      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-3 sm:grid-cols-2">
         {settings.map((setting) => (
           <NumberField key={setting.key} setting={setting} control={control} disabled={disabled} />
         ))}

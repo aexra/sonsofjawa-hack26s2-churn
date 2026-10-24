@@ -1,7 +1,6 @@
 import { useModelSettings } from '@/entities/model-settings';
 import { useSession } from '@/entities/session';
 import { ru } from '@/shared/i18n/ru';
-import { formatDateTime } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
@@ -30,13 +29,8 @@ export function ModelPage() {
       />
     );
   }
-  const changedBy = data.updatedBy ?? ru.common.emptyValue;
   return (
     <div className="flex flex-col gap-6">
-      <p className="m-0 -mt-2 text-caption text-ink-muted">
-        {ru.model.version(data.modelVersion)}
-        {data.updatedAt && ` · ${ru.model.changedAt(formatDateTime(data.updatedAt), changedBy)}`}
-      </p>
       <SettingsForm settings={data} canEdit={isAdmin} />
       <RevisionsTable settings={data} />
     </div>
