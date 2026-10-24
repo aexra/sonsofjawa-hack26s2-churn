@@ -2,6 +2,9 @@ package team.jawa.churn.auth;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -9,7 +12,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class UserRepository {
 
-    private static final String COLUMNS = "id, login, email, display_name, role, auth_provider, password_hash, enabled";
+    private static final String COLUMNS = "id, login, email, display_name, role, auth_provider, password_hash, enabled,"
+            + " created_at, last_login_at";
 
     private final JdbcClient jdbc;
 
@@ -38,14 +42,54 @@ public class UserRepository {
     }
 
     public long insertLocal(String login, String displayName, String role, String passwordHash) {
-        return jdbc.sql("INSERT INTO public.users (login, display_name, role, auth_provider, password_hash)"
-                        + " VALUES (:login, :displayName, :role, 'local', :passwordHash) RETURNING id")
+        return insertLocal(login, displayName, null, role, passwordHash);
+    }
+
+    public long insertLocal(String login, String displayName, String email, String role, String passwordHash) {
+        return jdbc.sql("INSERT INTO public.users (login, display_name, email, role, auth_provider, password_hash)"
+                        + " VALUES (:login, :displayName, :email, :role, 'local', :passwordHash) RETURNING id")
                 .param("login", login)
-                .param("displayName", displayName)
+                .param("displayName", displayName, Types.VARCHAR)
+                .param("email", email, Types.VARCHAR)
                 .param("role", role)
                 .param("passwordHash", passwordHash)
                 .query(Long.class)
                 .single();
+    }
+
+    public List<UserAccount> findAll() {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM public.users ORDER BY id")
+                .query(UserRepository::map)
+                .list();
+    }
+
+    public void lockAdministration() {
+        jdbc.sql("SELECT pg_advisory_xact_lock(hashtext('churn.users'))")
+                .query()
+                .singleRow();
+    }
+
+    public long countOtherActiveAdmins(long excludedId) {
+        return jdbc.sql("SELECT count(*) FROM public.users WHERE role = 'admin' AND enabled AND id <> :id")
+                .param("id", excludedId)
+                .query(Long.class)
+                .single();
+    }
+
+    public void update(long id, String role, boolean enabled, String displayName, String email, String passwordHash) {
+        jdbc.sql("UPDATE public.users SET role = :role, enabled = :enabled, display_name = :displayName,"
+                        + " email = :email, password_hash = :passwordHash WHERE id = :id")
+                .param("id", id)
+                .param("role", role)
+                .param("enabled", enabled)
+                .param("displayName", displayName, Types.VARCHAR)
+                .param("email", email, Types.VARCHAR)
+                .param("passwordHash", passwordHash, Types.VARCHAR)
+                .update();
+    }
+
+    public void delete(long id) {
+        jdbc.sql("DELETE FROM public.users WHERE id = :id").param("id", id).update();
     }
 
     public void touchLastLogin(long id) {
@@ -63,6 +107,8 @@ public class UserRepository {
                 rs.getString("role"),
                 rs.getString("auth_provider"),
                 rs.getString("password_hash"),
-                rs.getBoolean("enabled"));
+                rs.getBoolean("enabled"),
+                rs.getObject("created_at", OffsetDateTime.class),
+                rs.getObject("last_login_at", OffsetDateTime.class));
     }
 }

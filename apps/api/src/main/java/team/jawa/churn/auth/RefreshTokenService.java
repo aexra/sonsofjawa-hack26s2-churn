@@ -82,6 +82,13 @@ public class RefreshTokenService {
                 .update();
     }
 
+    @Transactional
+    public void revokeAllOf(long userId) {
+        jdbc.sql("UPDATE public.refresh_tokens SET revoked_at = now() WHERE user_id = :userId AND revoked_at IS NULL")
+                .param("userId", userId)
+                .update();
+    }
+
     private void revokeFamily(UUID familyId) {
         jdbc.sql("UPDATE public.refresh_tokens SET revoked_at = now()"
                         + " WHERE revoked_at IS NULL AND family_id = :familyId")
