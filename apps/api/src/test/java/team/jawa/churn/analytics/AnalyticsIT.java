@@ -4,11 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +30,9 @@ class AnalyticsIT extends IntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    DataSource dataSource;
 
     @Autowired
     RecalcService recalc;
@@ -167,7 +174,16 @@ class AnalyticsIT extends IntegrationTest {
         assertThat(running.lastRecalc().id()).isEqualTo(runId);
         assertThat(running.lastRecalc().status()).isEqualTo("running");
 
-        jdbc.queryForMap("SELECT * FROM public.recalculate_risk('manual', ?)", runId);
+        try (Connection connection = dataSource.getConnection();
+                Statement statement = connection.createStatement();
+                PreparedStatement call =
+                        connection.prepareStatement("SELECT * FROM public.recalculate_risk('manual', ?)")) {
+            connection.setAutoCommit(false);
+            statement.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+            call.setLong(1, runId);
+            call.executeQuery();
+            connection.commit();
+        }
 
         Summary finished = cache.get();
         assertThat(finished).isNotSameAs(running);
