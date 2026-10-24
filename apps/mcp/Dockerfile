@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY src src
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-editable
 
 FROM ${BASE_REGISTRY}/library/python:3.12-slim
 RUN useradd --system --uid 10001 --no-create-home churn
