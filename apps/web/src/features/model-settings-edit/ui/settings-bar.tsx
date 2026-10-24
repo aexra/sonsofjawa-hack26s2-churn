@@ -55,7 +55,7 @@ export function SettingsBar({ editor, impact }: SettingsBarProps) {
           variant="primary"
           size="sm"
           type="submit"
-          disabled={clean || !editor.valid}
+          disabled={clean || !editor.valid || editor.saving}
           loading={editor.saving}
         >
           {editor.saving ? ru.model.bar.saving : ru.model.bar.save}
