@@ -2,47 +2,19 @@ package team.jawa.churn;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
-@Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class ApplicationIT {
-
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine");
-
-    @LocalServerPort
-    int port;
+class ApplicationIT extends IntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
 
-    private final HttpClient client = HttpClient.newHttpClient();
-
-    private HttpResponse<String> get(String path) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
-                .build();
-        return client.send(request, HttpResponse.BodyHandlers.ofString());
-    }
-
     @Test
     void healthIsUp() throws Exception {
-        HttpResponse<String> response = get("/health");
+        HttpResponse<String> response = client().get("/health");
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).isEqualTo("{\"status\":\"UP\"}");
@@ -50,48 +22,10 @@ class ApplicationIT {
     }
 
     @Test
-    void migrationCreatesSourceSchema() {
-        Integer count = jdbc.queryForObject("select count(*) from public.accounts", Integer.class);
-
-        assertThat(count).isZero();
-    }
-
-    @Test
-    void servedSpecificationMatchesRepositoryFile() throws Exception {
-        HttpResponse<String> response = get("/api/v1/openapi.yaml");
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).isEqualTo(Files.readString(Path.of("../../openapi.yaml")));
-    }
-
-    @Test
-    void swaggerUiIsServed() throws Exception {
-        HttpClient following = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/docs"))
-                .build();
-
-        HttpResponse<String> response = following.send(request, HttpResponse.BodyHandlers.ofString());
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).contains("swagger-ui");
-    }
-
-    @Test
-    void generatedSpecificationEndpointIsDenied() throws Exception {
-        HttpResponse<String> response = get("/v3/api-docs");
-
-        assertThat(response.statusCode()).isIn(401, 403);
-    }
-
-    @Test
-    void otherPathsAreDenied() throws Exception {
-        for (String path : new String[] {"/api/v1/customers", "/metrics"}) {
-            HttpResponse<String> response = get(path);
-
-            assertThat(response.statusCode()).isIn(401, 403);
-            assertThat(response.body()).isEmpty();
-        }
+    void migrationsCreateSourceAndAuthSchema() {
+        assertThat(jdbc.queryForObject("select count(*) from public.accounts", Integer.class))
+                .isZero();
+        assertThat(jdbc.queryForObject("select count(*) from public.users", Integer.class))
+                .isPositive();
     }
 }

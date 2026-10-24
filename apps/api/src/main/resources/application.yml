@@ -43,3 +43,18 @@ springdoc:
     path: /api/v1/docs
     csrf:
       enabled: true
+
+auth:
+  local-enabled: ${AUTH_LOCAL_ENABLED:true}
+  jwt-secret: ${AUTH_JWT_SECRET:}
+  access-ttl: ${AUTH_ACCESS_TTL:15m}
+  refresh-ttl: ${AUTH_REFRESH_TTL:30d}
+  cookie-secure: ${AUTH_COOKIE_SECURE:false}
+  bootstrap-admin-login: ${AUTH_BOOTSTRAP_ADMIN_LOGIN:admin}
+  bootstrap-admin-password: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:}
+  bootstrap-user-login: ${AUTH_BOOTSTRAP_USER_LOGIN:analyst}
+  bootstrap-user-password: ${AUTH_BOOTSTRAP_USER_PASSWORD:}
+
+oidc:
+  issuer-uri: ${OIDC_ISSUER_URI:}
+  display-name: ${OIDC_DISPLAY_NAME:keycloak}
