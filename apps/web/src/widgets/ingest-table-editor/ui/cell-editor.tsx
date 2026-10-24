@@ -71,13 +71,16 @@ export function CellEditor({ spec, rowNumber, value, error, onChange }: CellEdit
       />
     );
 
-  if (!error) return control;
   return (
     <>
-      <Tooltip content={error}>{control}</Tooltip>
-      <span id={messageId} className="sr-only">
-        {error}
-      </span>
+      <Tooltip content={error} open={error ? undefined : false}>
+        {control}
+      </Tooltip>
+      {error && (
+        <span id={messageId} className="sr-only">
+          {error}
+        </span>
+      )}
     </>
   );
 }

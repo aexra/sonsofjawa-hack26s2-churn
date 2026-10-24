@@ -4,6 +4,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import { useMemo } from 'react';
 
 import { ENTITY_FIELDS, type IngestEntity } from '@/entities/ingest';
 import { ru } from '@/shared/i18n/ru';
@@ -16,34 +17,44 @@ import type { DraftRow, TableDraft } from '@/features/ingest-json-table';
 
 const helper = createColumnHelper<DraftRow>();
 
-export function EditableTable({ entity, draft }: { entity: IngestEntity; draft: TableDraft }) {
-  const columns = [
+declare module '@tanstack/react-table' {
+  interface TableMeta<TData> {
+    draft?: TData extends DraftRow ? TableDraft : never;
+  }
+}
+
+const buildColumns = (entity: IngestEntity) => [
+  helper.display({
+    id: 'number',
+    header: () => <span className="block text-right">#</span>,
+    cell: ({ row, table }) => {
+      const draft = table.options.meta?.draft;
+      if (!draft) return null;
+      const picked = draft.selected.has(row.original.key);
+      return (
+        <button
+          type="button"
+          aria-pressed={picked}
+          aria-label={ru.ingest.table.pickRow(row.index + 1)}
+          onClick={() => draft.toggleSelected(row.original.key)}
+          className={cn(
+            'h-8 w-8 cursor-pointer rounded-xs border border-transparent text-right font-mono text-caption text-ink-faint hover:border-line',
+            picked && 'border-accent bg-accent-soft text-accent',
+          )}
+        >
+          {row.index + 1}
+        </button>
+      );
+    },
+  }),
+  ...ENTITY_FIELDS[entity].map((spec) =>
     helper.display({
-      id: 'number',
-      header: () => <span className="block text-right">#</span>,
-      cell: ({ row }) => {
-        const picked = draft.selected.has(row.original.key);
+      id: spec.key,
+      header: spec.key,
+      cell: ({ row, table }) => {
+        const draft = table.options.meta?.draft;
+        if (!draft) return null;
         return (
-          <button
-            type="button"
-            aria-pressed={picked}
-            aria-label={ru.ingest.table.pickRow(row.index + 1)}
-            onClick={() => draft.toggleSelected(row.original.key)}
-            className={cn(
-              'h-8 w-8 cursor-pointer rounded-xs border border-transparent text-right font-mono text-caption text-ink-faint hover:border-line',
-              picked && 'border-accent bg-accent-soft text-accent',
-            )}
-          >
-            {row.index + 1}
-          </button>
-        );
-      },
-    }),
-    ...ENTITY_FIELDS[entity].map((spec) =>
-      helper.display({
-        id: spec.key,
-        header: spec.key,
-        cell: ({ row }) => (
           <CellEditor
             spec={spec}
             rowNumber={row.index + 1}
@@ -51,10 +62,14 @@ export function EditableTable({ entity, draft }: { entity: IngestEntity; draft: 
             error={draft.cellError(row.original.key, spec.key)}
             onChange={(value) => draft.setCell(row.original.key, spec.key, value)}
           />
-        ),
-      }),
-    ),
-  ];
+        );
+      },
+    }),
+  ),
+];
+
+export function EditableTable({ entity, draft }: { entity: IngestEntity; draft: TableDraft }) {
+  const columns = useMemo(() => buildColumns(entity), [entity]);
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -62,6 +77,7 @@ export function EditableTable({ entity, draft }: { entity: IngestEntity; draft: 
     columns,
     getRowId: (row) => row.key,
     getCoreRowModel: getCoreRowModel(),
+    meta: { draft },
   });
 
   const widths = new Map(ENTITY_FIELDS[entity].map((spec) => [spec.key, spec.width]));
