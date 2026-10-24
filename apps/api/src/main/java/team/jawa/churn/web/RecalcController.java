@@ -50,7 +50,7 @@ class RecalcController implements RecalcApi {
         return ResponseEntity.ok(status);
     }
 
-    private static RecalcRun toRun(RecalcService.Run run) {
+    static RecalcRun toRun(RecalcService.Run run) {
         return new RecalcRun(
                         run.id(),
                         RecalcRun.TriggerEnum.fromValue(run.trigger()),
