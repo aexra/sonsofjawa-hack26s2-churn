@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { TriangleAlert } from 'lucide-react';
+import { Plus, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -134,6 +134,7 @@ export function CreateApiKey() {
   return (
     <>
       <Button variant="primary" onClick={() => setOpen(true)}>
+        <Plus aria-hidden="true" className="size-4" />
         {ru.access.keys.create}
       </Button>
       <Dialog
