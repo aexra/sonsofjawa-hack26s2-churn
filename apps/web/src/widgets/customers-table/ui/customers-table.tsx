@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 
 import {
   CUSTOMER_FIELDS,
+  customerLinkState,
   EMPTY_FILTER,
   hasActiveFilter,
   isSortableField,
@@ -41,6 +42,7 @@ const customerPath = (row: CustomerRow) => `/customers/${String(row.id)}`;
 export function CustomersTable({ fields, onInvalidFields }: CustomersTableProps) {
   const [params, update] = useCustomersListParams();
   const navigate = useNavigate();
+  const linkState = customerLinkState(useLocation().search);
   const customers = useCustomers(params, fields);
   const isChanged = useRowHighlight({
     rows: customers.data?.items,
@@ -118,7 +120,7 @@ export function CustomersTable({ fields, onInvalidFields }: CustomersTableProps)
       window.open(customerPath(row), '_blank', 'noopener');
       return;
     }
-    void navigate(customerPath(row));
+    void navigate(customerPath(row), { state: linkState });
   };
 
   return (
@@ -143,6 +145,7 @@ export function CustomersTable({ fields, onInvalidFields }: CustomersTableProps)
             index === 0 ? (
               <Link
                 to={customerPath(row)}
+                state={linkState}
                 aria-label={ru.customers.openCustomer(row.id ?? 0)}
                 className="text-inherit no-underline hover:underline"
               >
