@@ -23,10 +23,11 @@ import { countFutureDays, countPastDays, toChartRows, todayDate } from '../model
 import { ChartLegend } from './chart-legend';
 import { ChartTooltip } from './chart-tooltip';
 import { ForecastPattern } from './forecast-pattern';
+import { NowBadge } from './now-badge';
 
 const COUNT_AXIS = 'count';
 const RISK_AXIS = 'risk';
-const AXIS_TICK = { fill: 'var(--ca-ink-muted)', fontSize: 12 };
+const AXIS_TICK = { fill: 'var(--ca-ink-faint)', fontSize: 11 };
 
 export function ChurnChart() {
   const chart = useChurnChart();
@@ -45,7 +46,7 @@ export function ChurnChart() {
   return (
     <section
       aria-labelledby="overview-chart"
-      className="flex min-w-0 flex-col gap-3 rounded-md border border-line bg-surface p-4"
+      className="flex min-w-0 flex-col gap-4 rounded-md border border-line bg-surface p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <h2 id="overview-chart" className="m-0 font-display text-heading">
@@ -66,7 +67,7 @@ export function ChurnChart() {
               height="100%"
               initialDimension={{ width: 1100, height: 260 }}
             >
-              <ComposedChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <ComposedChart data={rows} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <ForecastPattern id={patternId} />
                 </defs>
@@ -77,7 +78,7 @@ export function ChurnChart() {
                   tick={AXIS_TICK}
                   tickLine={false}
                   axisLine={{ stroke: 'var(--ca-chart-grid)' }}
-                  minTickGap={28}
+                  minTickGap={36}
                 />
                 <YAxis
                   yAxisId={COUNT_AXIS}
@@ -97,6 +98,7 @@ export function ChurnChart() {
                   dataKey="deletions"
                   name={text.facts}
                   stackId="day"
+                  radius={[2, 2, 0, 0]}
                   className="series-facts"
                   fill="var(--ca-chart-fact)"
                   isAnimationActive={false}
@@ -106,6 +108,7 @@ export function ChurnChart() {
                   dataKey="deletionsEstimated"
                   name={text.estimated}
                   stackId="day"
+                  radius={[2, 2, 0, 0]}
                   className="series-estimated"
                   fill="var(--ca-chart-fact-estimated)"
                   isAnimationActive={false}
@@ -115,6 +118,7 @@ export function ChurnChart() {
                   dataKey="expectedNonRenewals"
                   name={text.forecast}
                   stackId="day"
+                  radius={[2, 2, 0, 0]}
                   className="series-forecast"
                   fill={`url(#${patternId})`}
                   stroke="var(--ca-chart-forecast)"
@@ -138,12 +142,7 @@ export function ChurnChart() {
                     x={now}
                     stroke="var(--ca-ink)"
                     strokeDasharray="3 3"
-                    label={{
-                      value: text.now,
-                      position: 'insideTopRight',
-                      fill: 'var(--ca-ink)',
-                      fontSize: 12,
-                    }}
+                    label={<NowBadge value={text.now} />}
                   />
                 )}
               </ComposedChart>

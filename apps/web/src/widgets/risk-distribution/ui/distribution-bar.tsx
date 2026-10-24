@@ -1,3 +1,4 @@
+import { RiskBadge } from '@/entities/risk-level';
 import { ru } from '@/shared/i18n/ru';
 import { formatInt } from '@/shared/lib/format';
 
@@ -21,11 +22,11 @@ export function DistributionBar(counts: DistributionBarProps) {
     (segment) => `${ru.risk[segment.key]} ${formatInt(counts[segment.key])}`,
   ).join(', ');
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
       <div
         role="img"
         aria-label={`${ru.overview.distribution.barLabel}: ${summary}`}
-        className="flex h-4 gap-0.5 overflow-hidden rounded-xs"
+        className="flex h-3.5 gap-0.75 overflow-hidden rounded-full"
       >
         {SEGMENTS.filter((segment) => counts[segment.key] > 0).map((segment) => (
           <i
@@ -35,12 +36,13 @@ export function DistributionBar(counts: DistributionBarProps) {
           />
         ))}
       </div>
-      <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-2 p-0 text-caption text-ink-muted">
+      <ul className="m-0 grid list-none grid-cols-2 gap-x-2 gap-y-3 p-0 sm:grid-cols-4">
         {SEGMENTS.map((segment) => (
-          <li key={segment.key} className="inline-flex items-center gap-1.5">
-            <span aria-hidden="true" className={`size-2.5 rounded-xs ${segment.color}`} />
-            {ru.risk[segment.key]}
-            <b className="font-mono text-data-strong text-ink">{formatInt(counts[segment.key])}</b>
+          <li key={segment.key} className="flex min-w-0 flex-col items-start gap-0.5">
+            <RiskBadge level={segment.key} />
+            <b className="font-display text-[24px] leading-8 font-extrabold text-ink tabular-nums">
+              {formatInt(counts[segment.key])}
+            </b>
           </li>
         ))}
       </ul>

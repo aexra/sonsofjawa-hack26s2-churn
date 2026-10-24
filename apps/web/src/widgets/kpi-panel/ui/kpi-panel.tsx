@@ -1,3 +1,4 @@
+import { CreditCard, Gauge, TrendingDown, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -23,12 +24,16 @@ function KpiCards({ summary }: { summary: AnalyticsSummary }) {
     <div className={GRID}>
       <KpiCard
         primary
+        icon={TrendingDown}
+        tone="accent"
         label={text.loss(horizonDays)}
         value={hasScores ? formatAmount(money.expectedLoss) : dash}
         unit={hasScores ? ru.common.euro : undefined}
         hint={hasScores ? text.lossHint(accounts.scored) : undefined}
       />
       <KpiCard
+        icon={TriangleAlert}
+        tone="danger"
         label={text.high}
         value={hasScores ? formatInt(accounts.high) : dash}
         unit={hasScores ? text.highOf(accounts.scored) : undefined}
@@ -40,12 +45,14 @@ function KpiCards({ summary }: { summary: AnalyticsSummary }) {
         onClick={() => void navigate('/customers?level=high')}
       />
       <KpiCard
+        icon={CreditCard}
         label={text.revenue}
         value={hasScores ? formatAmount(money.revenueAtRisk) : dash}
         unit={hasScores ? ru.common.euro : undefined}
         hint={hasScores ? text.revenueHint(horizonDays) : undefined}
       />
       <KpiCard
+        icon={Gauge}
         label={text.average}
         value={summary.avgRiskScore == null ? dash : formatScore(summary.avgRiskScore)}
         hint={accounts.noScore === 0 ? text.allScored : text.withoutScore(accounts.noScore)}
@@ -68,7 +75,7 @@ export function KpiPanel() {
         <Skeleton className="h-5.5 w-60" />
         <div className={GRID}>
           {Array.from({ length: 4 }, (_, index) => (
-            <Skeleton key={index} className="h-30" />
+            <Skeleton key={index} className="h-34" />
           ))}
         </div>
       </div>
@@ -79,7 +86,7 @@ export function KpiPanel() {
   return (
     <section aria-labelledby="overview-kpi" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <h2 id="overview-kpi" className="m-0 font-display text-heading">
+        <h2 id="overview-kpi" className="m-0 font-display text-section">
           {ru.overview.kpi.title(horizonDays)}
         </h2>
         <button

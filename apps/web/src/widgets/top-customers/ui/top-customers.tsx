@@ -18,13 +18,10 @@ export function TopCustomers() {
   return (
     <section aria-labelledby="overview-top" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h2 id="overview-top" className="m-0 font-display text-heading">
+        <h2 id="overview-top" className="m-0 font-display text-section">
           {text.title}
         </h2>
-        <Link
-          to="/customers"
-          className="text-[13px] font-medium text-accent underline hover:text-ink"
-        >
+        <Link to="/customers" className="text-body-strong text-accent underline hover:text-ink">
           {text.all}
         </Link>
       </div>
@@ -33,7 +30,7 @@ export function TopCustomers() {
       ) : customers.isPending ? (
         <Skeleton className="h-60" />
       ) : customers.data.items.length === 0 ? (
-        <p className="m-0 rounded-md border border-line bg-surface p-4 text-ink-muted">
+        <p className="m-0 rounded-md border border-line bg-surface p-5 text-ink-muted">
           {text.empty}
         </p>
       ) : (
@@ -61,8 +58,13 @@ export function TopCustomers() {
             {
               key: 'reason',
               label: text.columns.reason,
+              clamp: true,
               render: (row) =>
-                row.topReason ? <ReasonText reason={row.topReason} /> : ru.common.emptyValue,
+                row.topReason ? (
+                  <ReasonText reason={row.topReason} multiline />
+                ) : (
+                  ru.common.emptyValue
+                ),
             },
             {
               key: 'loss',

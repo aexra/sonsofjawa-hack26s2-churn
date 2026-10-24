@@ -8,9 +8,10 @@ export type Reason = components['schemas']['Reason'];
 
 interface ReasonTextProps {
   reason: Reason;
+  multiline?: boolean;
 }
 
-export function ReasonText({ reason }: ReasonTextProps) {
+export function ReasonText({ reason, multiline = false }: ReasonTextProps) {
   return (
     <Tooltip
       content={
@@ -24,7 +25,7 @@ export function ReasonText({ reason }: ReasonTextProps) {
         </span>
       }
     >
-      <span className="block max-w-65 truncate">{reason.text}</span>
+      <span className={multiline ? 'line-clamp-2' : 'block max-w-65 truncate'}>{reason.text}</span>
     </Tooltip>
   );
 }

@@ -42,7 +42,7 @@ export function OverviewPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <KpiPanel />
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         <RiskDistribution />
         <TopReasons />
       </div>
