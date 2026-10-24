@@ -43,10 +43,10 @@ export function Button({
       type={type}
       disabled={disabled ?? loading}
       aria-busy={loading || undefined}
-      aria-disabled={blocked || undefined}
-      onClick={blocked ? undefined : onClick}
       className={cn(buttonVariants({ variant, size }), className)}
       {...props}
+      aria-disabled={blocked || undefined}
+      onClick={blocked ? undefined : onClick}
     >
       {loading && (
         <span

@@ -403,6 +403,30 @@ describe('users page', () => {
     expect(received).toEqual({ displayName: 'старший аналитик' });
   });
 
+  it('reports a rejected edit as a toast and keeps the dialog open', async () => {
+    server.use(
+      ...signedInAs(admin),
+      http.get('*/api/v1/admin/users', () => HttpResponse.json(people())),
+      http.patch('*/api/v1/admin/users/:id', () => problem(409, 'last_admin')),
+    );
+    renderAt('/access/users');
+
+    await screen.findByRole('table', { name: 'пользователи' });
+    await userEvent.click(rowOf('analyst').getByRole('button', { name: 'изменить' }));
+    const form = await screen.findByRole('dialog');
+    await userEvent.type(within(form).getByLabelText('новый пароль'), 'another-pass-1');
+    await userEvent.click(within(form).getByRole('button', { name: 'сохранить' }));
+
+    expect(
+      (
+        await screen.findAllByText(
+          'нельзя отключить, понизить или удалить последнего администратора',
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
   it('hides password and role editing for a sso user', async () => {
     server.use(
       ...signedInAs(admin),

@@ -37,7 +37,7 @@ const valuesOf = (user: User): FormValues => ({
 });
 
 function EditForm({ user, onClose }: { user: User; onClose: () => void }) {
-  const { mutate, isPending, error } = useUpdateUser();
+  const { mutate, isPending } = useUpdateUser();
   const sso = user.authProvider === 'oidc';
   const {
     register,
@@ -64,6 +64,7 @@ function EditForm({ user, onClose }: { user: User; onClose: () => void }) {
           toast.success(ru.access.users.saved);
           onClose();
         },
+        onError: (error) => toast.error(errorMessage(error)),
       },
     );
   };
@@ -145,11 +146,6 @@ function EditForm({ user, onClose }: { user: User; onClose: () => void }) {
               {...register('password')}
             />
           </Field>
-        )}
-        {error && (
-          <div role="alert" className="rounded-sm bg-risk-high-soft px-3 py-2.5 text-risk-high">
-            {errorMessage(error)}
-          </div>
         )}
       </form>
     </Dialog>
