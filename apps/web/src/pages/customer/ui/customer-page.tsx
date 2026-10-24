@@ -57,7 +57,7 @@ function CustomerContent({ id, details }: { id: number; details: CustomerDetails
       <div
         className={
           scored
-            ? 'grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] items-start gap-4'
+            ? 'grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]'
             : 'grid grid-cols-1 items-start gap-4 lg:grid-cols-[2fr_1fr]'
         }
       >
@@ -72,11 +72,9 @@ function CustomerContent({ id, details }: { id: number; details: CustomerDetails
         horizonDays={score.horizonDays}
         graceDays={graceDays}
       />
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="min-w-0 flex-[3_1_560px]">
-          <Transactions customerId={id} transactions={transactions} serviceNames={serviceNames} />
-        </div>
-        <div className="min-w-0 flex-[2_1_300px]">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <Transactions customerId={id} transactions={transactions} serviceNames={serviceNames} />
+        <div className="min-w-0 lg:mt-9.5">
           <ScoreHistory customerId={id} />
         </div>
       </div>

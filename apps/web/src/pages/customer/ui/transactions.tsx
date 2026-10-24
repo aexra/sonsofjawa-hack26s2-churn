@@ -20,7 +20,7 @@ export function Transactions({ customerId, transactions, serviceNames }: Transac
   return (
     <section aria-labelledby="customer-transactions" className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h2 id="customer-transactions" className="m-0 font-display text-heading">
+        <h2 id="customer-transactions" className="m-0 font-display text-section">
           {text.title}
         </h2>
         {total > 0 && (
@@ -31,7 +31,7 @@ export function Transactions({ customerId, transactions, serviceNames }: Transac
         )}
       </div>
       {items.length === 0 ? (
-        <p className="m-0 rounded-md border border-line bg-surface p-4 text-ink-muted">
+        <p className="m-0 rounded-md border border-line bg-surface p-5 text-ink-muted">
           {text.empty}
         </p>
       ) : (
@@ -45,7 +45,7 @@ export function Transactions({ customerId, transactions, serviceNames }: Transac
               label: text.columns.id,
               align: 'right',
               mono: true,
-              render: (item) => item.id,
+              render: (item) => <span className="text-ink-faint">{item.id}</span>,
             },
             {
               key: 'created',
@@ -65,9 +65,9 @@ export function Transactions({ customerId, transactions, serviceNames }: Transac
               label: text.columns.status,
               render: (item) =>
                 item.status === 'performed' ? (
-                  text.status.performed
+                  <span className="text-ink-muted">{text.status.performed}</span>
                 ) : (
-                  <StatusTag icon={CircleAlert} tone="negative">
+                  <StatusTag icon={CircleAlert} tone="negative" soft>
                     {text.status.not_performed}
                   </StatusTag>
                 ),

@@ -88,7 +88,7 @@ export function ScoreHistory({ customerId }: { customerId: number }) {
   return (
     <section
       aria-labelledby="score-history"
-      className="flex min-w-0 flex-col gap-3 rounded-md border border-line bg-surface p-4"
+      className="flex min-w-0 flex-col gap-3 rounded-md border border-line bg-surface p-5"
     >
       <h2 id="score-history" className="m-0 font-display text-heading">
         {text.title}

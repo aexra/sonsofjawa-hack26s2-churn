@@ -58,19 +58,19 @@ export function AnomaliesBanner({ anomalies, services, graceDays }: AnomaliesBan
   return (
     <div
       role="alert"
-      className="flex items-start gap-3 rounded-md border border-risk-medium-fill bg-risk-medium-soft px-4 py-3"
+      className="flex items-start gap-3.5 rounded-md border border-risk-medium-fill bg-risk-medium-soft px-4.5 py-4"
     >
       <Tooltip content={text.hint}>
         <button
           type="button"
           aria-label={text.hint}
-          className="inline-flex cursor-help border-0 bg-transparent p-0 pt-0.5 text-risk-medium"
+          className="grid size-7 flex-none cursor-help place-items-center rounded-sm border-0 bg-risk-medium-fill p-0 text-brand-black"
         >
           <TriangleAlert aria-hidden="true" className="size-4" />
         </button>
       </Tooltip>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <b className="font-semibold">
+      <div className="flex min-w-0 flex-col gap-1">
+        <b className="font-bold text-risk-medium">
           {text.heading(anomalies.map((anomaly) => text[anomaly].title).join('; '))}
         </b>
         <span className="text-ink-muted">

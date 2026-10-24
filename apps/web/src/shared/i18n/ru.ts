@@ -185,6 +185,7 @@ export const ru = {
     score: {
       title: 'оценка риска',
       loyalty: 'лояльность',
+      levelLabel: { high: 'высокий риск', medium: 'средний риск', low: 'низкий риск' },
       recalculated: 'пересчитано',
       modelVersion: 'версия модели',
       validUntil: 'оценка действует до',

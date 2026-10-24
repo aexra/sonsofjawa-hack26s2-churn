@@ -182,7 +182,7 @@ describe('customer card', () => {
     expect(screen.getByText('78%')).toBeInTheDocument();
     expect(screen.getByText('22,04')).toBeInTheDocument();
     expect(
-      within(screen.getByRole('region', { name: 'оценка риска' })).getByText('высокий'),
+      within(screen.getByRole('region', { name: 'оценка риска' })).getByText('высокий риск'),
     ).toBeInTheDocument();
     expect(screen.getByText(/ожидаемые потери за 30 дн. — выручка/)).toBeInTheDocument();
     expect(await screen.findByText(/высокий — от 50, средний — от 25/)).toBeInTheDocument();

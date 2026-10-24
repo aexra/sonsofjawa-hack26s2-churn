@@ -2,13 +2,22 @@ import { type CustomerScore } from '@/entities/customer';
 import { findSettingValue, useModelSettings } from '@/entities/model-settings';
 import { RiskBadge } from '@/entities/risk-level';
 import { ru } from '@/shared/i18n/ru';
+import { cn } from '@/shared/lib/cn';
 import { formatDateTime, formatScore } from '@/shared/lib/format';
-import { EmptyState } from '@/shared/ui/empty-state';
+import { KeyValueList } from '@/shared/ui/key-value-list';
 
 const text = ru.customer.score;
 
 const dateOrDash = (value: string | null | undefined) =>
   value === null || value === undefined ? ru.common.emptyValue : formatDateTime(value);
+
+const SCORE_TONES = {
+  high: 'text-risk-high',
+  medium: 'text-risk-medium',
+  low: 'text-risk-low',
+  none: 'text-ink',
+  pending: 'text-ink',
+} as const;
 
 function Heading() {
   return (
@@ -18,18 +27,31 @@ function Heading() {
   );
 }
 
+function LevelScale({ medium, high }: { medium: number; high: number }) {
+  return (
+    <div aria-hidden="true" className="flex h-1.5 gap-0.5 overflow-hidden rounded-full">
+      <span className="bg-risk-low" style={{ flex: medium }} />
+      <span className="bg-risk-medium-fill" style={{ flex: high - medium }} />
+      <span className="bg-risk-high" style={{ flex: 100 - high }} />
+    </div>
+  );
+}
+
 export function ScoreCard({ score }: { score: CustomerScore }) {
   const settings = useModelSettings().data;
   const levelHigh = findSettingValue(settings, 'level_high');
   const levelMedium = findSettingValue(settings, 'level_medium');
-  const shell = 'flex flex-col gap-4 rounded-md border border-line bg-surface p-4';
+  const shell = 'flex flex-col gap-3.5 rounded-md border border-line bg-surface p-5';
 
   if (score.status === 'no_score') {
     const reason = score.noScoreReason ?? 'no_services';
     return (
       <section aria-labelledby="customer-score" className={shell}>
         <Heading />
-        <EmptyState kind="no-score" title={text.noScore} text={text.noScoreText[reason]} />
+        <div className="flex flex-col items-start gap-3">
+          <RiskBadge level="none" size="lg" />
+          <p className="m-0 max-w-[56ch] text-ink-muted">{text.noScoreText[reason]}</p>
+        </div>
       </section>
     );
   }
@@ -47,34 +69,43 @@ export function ScoreCard({ score }: { score: CustomerScore }) {
     );
   }
 
+  const level = score.riskLevel ?? 'none';
+  const levelLabel = level === 'high' || level === 'medium' || level === 'low';
   return (
     <section aria-labelledby="customer-score" className={shell}>
       <Heading />
-      <div className="flex flex-wrap items-center gap-4">
-        <RiskBadge level={score.riskLevel ?? 'none'} score={score.riskScore ?? null} size="lg" />
-        <div className="flex flex-col">
-          <span className="text-caption text-ink-muted">{text.loyalty}</span>
-          <span className="font-mono text-[20px] leading-7 font-semibold tabular-nums">
+      <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+        <div className="flex flex-col items-start gap-2">
+          <span className={cn('font-display text-score tabular-nums', SCORE_TONES[level])}>
+            {score.riskScore === null || score.riskScore === undefined
+              ? ru.common.emptyValue
+              : formatScore(score.riskScore)}
+          </span>
+          <RiskBadge
+            level={level}
+            size="lg"
+            label={levelLabel ? text.levelLabel[level] : undefined}
+          />
+        </div>
+        <div className="flex flex-col gap-0.5 border-l border-line pl-5">
+          <span className="text-label text-ink-muted">{text.loyalty}</span>
+          <span className="font-display text-[28px] leading-[34px] font-bold tabular-nums">
             {score.loyalty === null || score.loyalty === undefined
               ? ru.common.emptyValue
               : formatScore(score.loyalty)}
           </span>
         </div>
       </div>
-      <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2.5 text-data">
-        <dt className="text-ink-muted">{text.recalculated}</dt>
-        <dd className="m-0 text-right font-mono whitespace-nowrap tabular-nums">
-          {dateOrDash(score.calculatedAt)}
-        </dd>
-        <dt className="text-ink-muted">{text.modelVersion}</dt>
-        <dd className="m-0 text-right font-mono tabular-nums">
-          {score.modelVersion ?? ru.common.emptyValue}
-        </dd>
-        <dt className="text-ink-muted">{text.validUntil}</dt>
-        <dd className="m-0 text-right font-mono whitespace-nowrap tabular-nums">
-          {dateOrDash(score.validUntil)}
-        </dd>
-      </dl>
+      {levelHigh !== undefined && levelMedium !== undefined && (
+        <LevelScale medium={levelMedium} high={levelHigh} />
+      )}
+      <KeyValueList
+        rows={[
+          { label: text.recalculated, value: dateOrDash(score.calculatedAt) },
+          { label: text.modelVersion, value: score.modelVersion ?? ru.common.emptyValue },
+          { label: text.validUntil, value: dateOrDash(score.validUntil) },
+        ]}
+      />
       {score.horizonDays !== undefined && levelHigh !== undefined && levelMedium !== undefined && (
         <p className="m-0 text-caption text-ink-muted">
           {text.scale(score.horizonDays, levelHigh, levelMedium)}

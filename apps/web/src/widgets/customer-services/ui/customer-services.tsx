@@ -85,7 +85,7 @@ export function CustomerServices({
   return (
     <section aria-labelledby="customer-services" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h2 id="customer-services" className="m-0 font-display text-heading">
+        <h2 id="customer-services" className="m-0 font-display text-section">
           {text.title}
         </h2>
         {services.length > 0 && (
@@ -96,7 +96,7 @@ export function CustomerServices({
         )}
       </div>
       {services.length === 0 ? (
-        <p className="m-0 rounded-md border border-line bg-surface p-4 text-ink-muted">
+        <p className="m-0 rounded-md border border-line bg-surface p-5 text-ink-muted">
           {text.empty}
         </p>
       ) : (
@@ -110,10 +110,15 @@ export function CustomerServices({
               label: text.columns.name,
               mono: true,
               render: (service) => (
-                <span className={cn('inline-flex flex-col gap-0.5', dim(service))}>
+                <span
+                  className={cn(
+                    'inline-flex flex-col items-start gap-1 whitespace-nowrap',
+                    dim(service),
+                  )}
+                >
                   {service.name}
                   {service.atRisk && (
-                    <StatusTag icon={CircleAlert} tone="negative">
+                    <StatusTag tone="negative" soft>
                       {text.atRisk}
                     </StatusTag>
                   )}
@@ -125,6 +130,7 @@ export function CustomerServices({
               label: text.columns.status,
               render: (service) => (
                 <StatusTag
+                  soft={service.status === 'prolong_wait'}
                   icon={STATUS_ICONS[service.status]}
                   tone={
                     service.status === 'prolong_wait'

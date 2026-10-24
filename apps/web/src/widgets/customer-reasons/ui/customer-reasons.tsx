@@ -16,7 +16,7 @@ export function CustomerReasons({ score }: CustomerReasonsProps) {
   return (
     <section
       aria-labelledby="customer-reasons"
-      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4"
+      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <h2 id="customer-reasons" className="m-0 font-display text-heading">

@@ -11,11 +11,11 @@ interface ReasonListProps {
 export function ReasonList({ reasons }: ReasonListProps) {
   const top = Math.max(...reasons.map((reason) => reason.contribution), 0) || 1;
   return (
-    <ol className="m-0 flex list-none flex-col gap-3 p-0">
+    <ol className="m-0 flex list-none flex-col p-0">
       {reasons.map((reason) => (
         <li
           key={reason.key}
-          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 md:grid-cols-[minmax(0,1fr)_120px_64px]"
+          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 border-t border-line py-3 first:border-t-0 md:grid-cols-[minmax(0,1fr)_minmax(140px,220px)_64px]"
         >
           <div className="min-w-0">
             <div className="text-label text-ink-muted">{reason.title}</div>
@@ -43,7 +43,7 @@ export function ReasonList({ reasons }: ReasonListProps) {
               />
             </div>
           </Tooltip>
-          <div className="order-2 text-right font-mono text-data-strong tabular-nums md:order-none">
+          <div className="order-2 text-right font-mono text-data-strong font-semibold tabular-nums md:order-none">
             +{formatScore(reason.contribution)}
           </div>
         </li>

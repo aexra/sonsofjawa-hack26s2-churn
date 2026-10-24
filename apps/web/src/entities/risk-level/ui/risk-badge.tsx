@@ -34,9 +34,10 @@ interface RiskBadgeProps {
   level: RiskLevel;
   score?: number | null;
   size?: 'md' | 'lg';
+  label?: string;
 }
 
-export function RiskBadge({ level, score, size = 'md' }: RiskBadgeProps) {
+export function RiskBadge({ level, score, size = 'md', label }: RiskBadgeProps) {
   const Icon = icons[level];
   return (
     <span className="inline-flex items-center gap-2">
@@ -50,7 +51,7 @@ export function RiskBadge({ level, score, size = 'md' }: RiskBadgeProps) {
           aria-hidden="true"
           className={level === 'pending' ? 'size-3.5 animate-pulse' : 'size-3.5'}
         />
-        {ru.risk[level]}
+        {label ?? ru.risk[level]}
       </span>
     </span>
   );
