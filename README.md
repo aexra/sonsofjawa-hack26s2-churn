@@ -326,6 +326,10 @@ curl -s -H "Authorization: Bearer ck_a1b2c3d4_ВАШ_СЕКРЕТ" \
 | `churn_horizon_days` | горизонт прогноза, дней |
 | `churn_delta_pending_accounts` | клиентов в очереди на пересчёт |
 | `churn_last_recalc_timestamp_seconds` | время последнего успешного пересчёта |
+| `churn_recalc_duration_seconds{trigger,result}` | длительность пересчёта |
+| `churn_recalc_accounts_total{trigger}` | обработано клиентов при пересчётах |
+| `churn_ingest_rows_total{entity,mode,result}` | строки, принятые и отклонённые при загрузке данных |
+| `churn_sse_clients` | подключённых клиентов потока событий |
 
 Помимо них отдаются стандартные метрики JVM, HTTP, пула соединений.
 
