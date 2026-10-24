@@ -8,7 +8,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 
 import { cn } from '@/shared/lib/cn';
 
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 
 export type SortDirection = 'asc' | 'desc';
 export type SortState = { key: string; dir: SortDirection } | null;
@@ -29,7 +29,7 @@ interface DataTableProps<Row> {
   caption: string;
   sort?: SortState;
   onSort?: (key: string, dir: SortDirection | null) => void;
-  onRowClick?: (row: Row) => void;
+  onRowClick?: (row: Row, event: MouseEvent<HTMLTableRowElement>) => void;
   isChanged?: (row: Row) => boolean;
 }
 
@@ -117,7 +117,15 @@ export function DataTable<Row>({
           {table.getRowModel().rows.map((row) => (
             <tr
               key={row.id}
-              onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+              onClick={
+                onRowClick
+                  ? (event) => {
+                      if (event.target instanceof Element && event.target.closest('a, button'))
+                        return;
+                      onRowClick(row.original, event);
+                    }
+                  : undefined
+              }
               className={cn(
                 'group',
                 onRowClick && 'cursor-pointer hover:[&>td]:bg-surface-sunken',
