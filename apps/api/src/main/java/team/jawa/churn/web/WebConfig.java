@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.TypeDescriptor;
+import org.springframework.core.convert.converter.ConditionalConverter;
 import org.springframework.core.convert.converter.ConditionalGenericConverter;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.core.convert.converter.ConverterFactory;
@@ -23,13 +24,16 @@ class WebConfig implements WebMvcConfigurer {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static final class GeneratedEnumConverterFactory implements ConverterFactory<String, Enum> {
+    private static final class GeneratedEnumConverterFactory
+            implements ConverterFactory<String, Enum>, ConditionalConverter {
+
+        @Override
+        public boolean matches(TypeDescriptor sourceType, TypeDescriptor targetType) {
+            return targetType.getType().getPackageName().equals(GENERATED_MODELS);
+        }
 
         @Override
         public <T extends Enum> Converter<String, T> getConverter(Class<T> targetType) {
-            if (!targetType.getPackageName().equals(GENERATED_MODELS)) {
-                return source -> (T) Enum.valueOf(targetType, source);
-            }
             return source -> {
                 for (T constant : targetType.getEnumConstants()) {
                     if (constant.toString().equals(source)) {

@@ -1,5 +1,6 @@
 package team.jawa.churn.customers;
 
+import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -63,9 +64,14 @@ public class CustomerRepository {
                     .append(" NULLS LAST");
         }
         sql.append(paging);
+        ReasonRenderer.Catalog catalog = query.columns().stream()
+                        .anyMatch(column -> column.kind() == CustomerColumn.Kind.TOP_REASON
+                                || column.kind() == CustomerColumn.Kind.REASONS)
+                ? reasons.catalog()
+                : null;
         return jdbc.sql(sql.toString())
                 .params(params)
-                .query((rs, row) -> map(rs, query.columns()))
+                .query((rs, row) -> map(rs, query.columns(), catalog))
                 .list();
     }
 
@@ -111,7 +117,8 @@ public class CustomerRepository {
         return conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
     }
 
-    private Map<String, Object> map(ResultSet rs, List<CustomerColumn> columns) throws SQLException {
+    private Map<String, Object> map(ResultSet rs, List<CustomerColumn> columns, ReasonRenderer.Catalog catalog)
+            throws SQLException {
         Map<String, Object> row = new LinkedHashMap<>();
         for (CustomerColumn column : columns) {
             String alias = column.apiName();
@@ -126,12 +133,19 @@ public class CustomerRepository {
                         case DECIMAL -> rs.getBigDecimal(alias);
                         case TIMESTAMP -> rs.getObject(alias, OffsetDateTime.class);
                         case STRING_ARRAY -> {
-                            java.sql.Array array = rs.getArray(alias);
-                            yield array == null ? List.of() : List.of((String[]) array.getArray());
+                            Array array = rs.getArray(alias);
+                            if (array == null) {
+                                yield List.of();
+                            }
+                            try {
+                                yield List.of((String[]) array.getArray());
+                            } finally {
+                                array.free();
+                            }
                         }
-                        case REASONS -> reasons.render(rs.getString(alias));
+                        case REASONS -> reasons.render(rs.getString(alias), catalog);
                         case TOP_REASON ->
-                            reasons.render(rs.getString(alias)).stream()
+                            reasons.render(rs.getString(alias), catalog).stream()
                                     .findFirst()
                                     .orElse(null);
                     });

@@ -3,6 +3,7 @@ package team.jawa.churn.customers;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import java.net.URLEncoder;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -186,7 +187,7 @@ class CustomersListIT extends IntegrationTest {
     @Test
     void invalidSortsAreRejected() throws Exception {
         for (String sort : List.of("id;drop", "unknown,asc", "bonusState,asc", "reasons,desc", "id,up", "id")) {
-            HttpResponse<String> response = get("?sort=" + java.net.URLEncoder.encode(sort, "UTF-8"));
+            HttpResponse<String> response = get("?sort=" + URLEncoder.encode(sort, "UTF-8"));
             assertThat(response.statusCode()).as(sort).isEqualTo(400);
             assertThat(response.body()).as(sort).contains("\"code\":\"invalid_sort\"");
         }
@@ -195,7 +196,7 @@ class CustomersListIT extends IntegrationTest {
     @Test
     void unknownFieldsAndFiltersAreRejected() throws Exception {
         HttpResponse<String> field = get("?fields=id,password");
-        HttpResponse<String> injection = get("?fields=" + java.net.URLEncoder.encode("id;drop", "UTF-8"));
+        HttpResponse<String> injection = get("?fields=" + URLEncoder.encode("id;drop", "UTF-8"));
         HttpResponse<String> level = get("?level=critical");
         HttpResponse<String> status = get("?status=weird");
         HttpResponse<String> score = get("?minScore=150");

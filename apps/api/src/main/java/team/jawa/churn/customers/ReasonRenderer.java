@@ -4,12 +4,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
@@ -18,10 +21,11 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class ReasonRenderer {
 
-    private record Catalog(long version, Map<String, Feature> features) {}
+    public record Feature(String title, String template) {}
 
-    private record Feature(String title, String template) {}
+    public record Catalog(long version, Map<String, Feature> features) {}
 
+    private static final Logger log = LoggerFactory.getLogger(ReasonRenderer.class);
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z0-9_]+)}");
     private static final Locale RU = Locale.forLanguageTag("ru-RU");
     private static final TypeReference<List<Map<String, Object>>> REASONS = new TypeReference<>() {};
@@ -35,11 +39,11 @@ public class ReasonRenderer {
         this.json = json;
     }
 
-    public List<Map<String, Object>> render(String reasonsJson) {
+    public List<Map<String, Object>> render(String reasonsJson, Catalog catalog) {
         if (reasonsJson == null || reasonsJson.isBlank()) {
             return List.of();
         }
-        Map<String, Feature> features = features();
+        Map<String, Feature> features = catalog.features();
         List<Map<String, Object>> rendered = new ArrayList<>();
         for (Map<String, Object> raw : json.readValue(reasonsJson, REASONS)) {
             String key = String.valueOf(raw.get("key"));
@@ -59,12 +63,15 @@ public class ReasonRenderer {
         return rendered;
     }
 
-    static String fill(String template, Map<String, Object> params) {
+    private String fill(String template, Map<String, Object> params) {
         Matcher matcher = PLACEHOLDER.matcher(template);
         StringBuilder text = new StringBuilder();
         while (matcher.find()) {
             String name = matcher.group(1);
             Object value = params.get(name);
+            if (value == null) {
+                log.warn("reason template parameter is missing: name={}", name);
+            }
             String replacement = value == null ? matcher.group() : format(name, value);
             matcher.appendReplacement(text, Matcher.quoteReplacement(replacement));
         }
@@ -79,7 +86,7 @@ public class ReasonRenderer {
         BigDecimal decimal = new BigDecimal(number.toString());
         if (name.endsWith("Amount")) {
             NumberFormat money = NumberFormat.getCurrencyInstance(RU);
-            money.setCurrency(java.util.Currency.getInstance("EUR"));
+            money.setCurrency(Currency.getInstance("EUR"));
             return money.format(decimal.movePointLeft(2));
         }
         if (name.endsWith("Pct")) {
@@ -91,13 +98,13 @@ public class ReasonRenderer {
         return decimal.stripTrailingZeros().toPlainString().replace('.', ',');
     }
 
-    private Map<String, Feature> features() {
+    public Catalog catalog() {
         long version = jdbc.sql("SELECT coalesce(max(version), 0) FROM public.model_revisions")
                 .query(Long.class)
                 .single();
         Catalog current = catalog;
         if (current != null && current.version() == version) {
-            return current.features();
+            return current;
         }
         Map<String, Feature> loaded = new LinkedHashMap<>();
         jdbc.sql("SELECT key, title, reason_template FROM public.model_features ORDER BY sort_order")
@@ -107,7 +114,8 @@ public class ReasonRenderer {
                     return null;
                 })
                 .list();
-        catalog = new Catalog(version, loaded);
-        return loaded;
+        Catalog fresh = new Catalog(version, loaded);
+        catalog = fresh;
+        return fresh;
     }
 }
