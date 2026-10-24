@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router';
 import { useSession } from '@/entities/session';
 import { useResumeAfterSso } from '@/features/auth-login';
 import { ForbiddenPage } from '@/pages/forbidden';
+import { LiveEventsProvider } from '@/shared/api/live-events';
 import { ru } from '@/shared/i18n/ru';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
@@ -41,10 +42,10 @@ export function RequireAuth() {
     return <Navigate to={`/login?${query}`} replace />;
   }
   return (
-    <>
+    <LiveEventsProvider>
       <ResumeAfterSso />
       <Outlet />
-    </>
+    </LiveEventsProvider>
   );
 }
 

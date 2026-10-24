@@ -3,13 +3,15 @@ import { cleanup } from '@testing-library/react';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 
+import { FakeEventSource } from './fake-event-source';
+
 class ResizeObserverStub {
   observe() {}
   unobserve() {}
   disconnect() {}
 }
 
-Object.assign(globalThis, { ResizeObserver: ResizeObserverStub });
+Object.assign(globalThis, { ResizeObserver: ResizeObserverStub, EventSource: FakeEventSource });
 
 export const server = setupServer();
 
@@ -26,6 +28,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  FakeEventSource.reset();
   server.resetHandlers();
   cleanup();
 });
