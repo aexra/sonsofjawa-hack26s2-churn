@@ -7,9 +7,10 @@ export function ModelClock() {
   if (!settings.data) return null;
   const { mode, asOf } = settings.data.clock;
   return (
-    <span className="text-caption text-ink-muted">
-      {ru.clock.moment} <b className="font-medium text-ink tabular-nums">{formatDateTime(asOf)}</b>{' '}
-      · {ru.clock[mode]}
+    <span className="inline-flex h-8 items-center rounded-full border border-line bg-surface px-3 text-caption whitespace-nowrap text-ink-muted">
+      {ru.clock.moment}&nbsp;
+      <b className="font-semibold text-ink tabular-nums">{formatDateTime(asOf)}</b>
+      &nbsp;·&nbsp;{ru.clock[mode]}
     </span>
   );
 }

@@ -37,13 +37,19 @@ export function UserMenu({ login, role, authProvider }: UserMenuProps) {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={ru.header.userMenu}
-        className="inline-flex h-control-md cursor-pointer items-center gap-2 rounded-sm px-2 text-body text-ink-muted hover:text-ink"
+        className="inline-flex h-control-md cursor-pointer items-center gap-2.5 rounded-sm pr-1.5 pl-1 text-body-strong font-medium text-ink hover:bg-surface-sunken"
       >
+        <span
+          aria-hidden="true"
+          className="grid size-7 place-items-center rounded-sm bg-accent font-display text-[13px] font-bold text-on-accent"
+        >
+          {login.charAt(0)}
+        </span>
         <span>
           {login}
           {roleLabel && ` · ${roleLabel}`}
         </span>
-        <ChevronDown aria-hidden="true" className="size-4" />
+        <ChevronDown aria-hidden="true" className="size-4 text-ink-muted" />
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuLabel>

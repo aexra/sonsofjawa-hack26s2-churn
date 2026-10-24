@@ -33,7 +33,7 @@ export function RecalcIndicator() {
       tabIndex={state.kind === 'error' ? 0 : undefined}
       data-state={state.kind}
       className={cn(
-        'inline-flex h-7 items-center gap-2 rounded-full border border-line bg-surface px-3 text-caption whitespace-nowrap text-ink-muted',
+        'inline-flex h-8 items-center gap-2 rounded-full border border-line bg-surface px-3 text-caption whitespace-nowrap text-ink-muted',
         state.kind === 'error' && 'border-negative text-negative',
       )}
     >
