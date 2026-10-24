@@ -108,6 +108,27 @@ describe('api client', () => {
     expect(lastBody).toBe('');
   });
 
+  it('sends the rotated csrf token when replaying after a refresh', async () => {
+    document.cookie = 'XSRF-TOKEN=old';
+    const tokens: (string | null)[] = [];
+    server.use(
+      http.post(`${BASE}/auth/logout`, ({ request }) => {
+        tokens.push(request.headers.get('X-XSRF-TOKEN'));
+        return tokens.length === 1
+          ? problem(401, 'unauthenticated')
+          : new HttpResponse(null, { status: 204 });
+      }),
+      http.post(`${BASE}/auth/refresh`, () => {
+        document.cookie = 'XSRF-TOKEN=new';
+        return HttpResponse.json(user);
+      }),
+    );
+
+    await unwrap(createApiClient(BASE).POST('/api/v1/auth/logout'));
+
+    expect(tokens).toEqual(['old', 'new']);
+  });
+
   it('reports an expired session when refresh fails', async () => {
     const expired = vi.fn();
     setSessionExpiredHandler(expired);

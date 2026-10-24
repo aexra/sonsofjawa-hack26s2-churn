@@ -50,7 +50,6 @@ export const ru = {
     password: 'пароль',
     submit: 'войти',
     submitting: 'вход…',
-    or: 'или',
     footnote: 'доступ выдаёт администратор панели',
     localDisabled: 'вход по паролю отключён',
     sessionExpired: 'сессия истекла, войдите снова',

@@ -84,7 +84,10 @@ describe('route guards', () => {
     server.use(...signedInAs(analyst));
     renderAt('/data');
 
-    expect(await screen.findByRole('heading', { name: 'нет доступа' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'нет доступа' }),
+    ).toBeInTheDocument();
+    expect(document.title).toBe('нет доступа · анализатор рисков оттока');
     expect(screen.getByText('этот раздел доступен администратору')).toBeInTheDocument();
   });
 

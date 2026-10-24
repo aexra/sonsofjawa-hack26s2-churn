@@ -25,6 +25,12 @@ const readCookie = (name: string): string | undefined => {
   return undefined;
 };
 
+const applyCsrf = (request: Request): void => {
+  if (SAFE_METHODS.has(request.method)) return;
+  const token = readCookie(CSRF_COOKIE);
+  if (token) request.headers.set(CSRF_HEADER, token);
+};
+
 let sessionExpiredHandler: (() => void) | undefined;
 let refreshing: Promise<boolean> | null = null;
 
@@ -51,10 +57,7 @@ export const createApiClient = (apiBaseUrl: string) => {
 
   const middleware: Middleware = {
     onRequest({ request }) {
-      if (!SAFE_METHODS.has(request.method)) {
-        const token = readCookie(CSRF_COOKIE);
-        if (token) request.headers.set(CSRF_HEADER, token);
-      }
+      applyCsrf(request);
       replayable.set(request, request.clone());
       return request;
     },
@@ -64,6 +67,7 @@ export const createApiClient = (apiBaseUrl: string) => {
       const original = replayable.get(request);
       if (!original) return response;
       if (await refreshSession(origin)) {
+        applyCsrf(original);
         return fetch(original, { credentials: 'include' });
       }
       sessionExpiredHandler?.();

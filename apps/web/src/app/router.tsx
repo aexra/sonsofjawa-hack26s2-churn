@@ -14,7 +14,7 @@ import { AppShell, type RouteHandle } from '@/widgets/app-shell';
 
 import { RequireAdmin, RequireAuth } from './guards';
 
-const handle = (title: string): RouteHandle => ({ title });
+const handle = (title: string, adminOnly = false): RouteHandle => ({ title, adminOnly });
 
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
@@ -31,16 +31,16 @@ export const routes: RouteObject[] = [
           {
             element: <RequireAdmin />,
             children: [
-              { path: 'data', element: <DataPage />, handle: handle(ru.pages.data) },
+              { path: 'data', element: <DataPage />, handle: handle(ru.pages.data, true) },
               {
                 path: 'access/keys',
                 element: <AccessKeysPage />,
-                handle: handle(ru.pages.apiKeys),
+                handle: handle(ru.pages.apiKeys, true),
               },
               {
                 path: 'access/users',
                 element: <AccessUsersPage />,
-                handle: handle(ru.pages.users),
+                handle: handle(ru.pages.users, true),
               },
             ],
           },

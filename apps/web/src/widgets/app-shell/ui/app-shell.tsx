@@ -9,6 +9,7 @@ import { UserMenu } from './user-menu';
 
 export interface RouteHandle {
   title: string;
+  adminOnly?: boolean;
 }
 
 const isRouteHandle = (value: unknown): value is RouteHandle =>
@@ -20,11 +21,13 @@ export function AppShell() {
     .map((match) => match.handle)
     .filter(isRouteHandle)
     .at(-1);
-  const title = handle?.title ?? ru.app.title;
+  const denied = Boolean(handle?.adminOnly) && !isAdmin;
+  const pageTitle = denied ? ru.forbidden.title : handle?.title;
+  const title = pageTitle ?? ru.app.title;
 
   useEffect(() => {
-    document.title = handle ? `${handle.title} · ${ru.app.title}` : ru.app.title;
-  }, [handle]);
+    document.title = pageTitle ? `${pageTitle} · ${ru.app.title}` : ru.app.title;
+  }, [pageTitle]);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
