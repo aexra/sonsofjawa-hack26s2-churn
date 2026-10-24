@@ -68,8 +68,9 @@ class PostgresFixture(unittest.TestCase):
         )
         return json.loads(result)
 
-    def fixture(self):
-        data = json.loads((HERE / 'fixtures/organizer.json').read_text())
+    def fixture(self, data=None):
+        if data is None:
+            data = json.loads((HERE / 'fixtures/organizer.json').read_text())
         for table in ['accounts', 'services', 'transactions']:
             payload = json.dumps(data[table]).replace("'", "''")
             self.sql(f"INSERT INTO {table} SELECT * FROM "
