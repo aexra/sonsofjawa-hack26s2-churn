@@ -4,6 +4,7 @@ import { useId, useState, type ChangeEvent, type DragEvent } from 'react';
 import { cn } from '@/shared/lib/cn';
 
 import { Button } from './button';
+import { IconTile } from './icon-tile';
 
 interface FileDropProps {
   accept: string;
@@ -40,13 +41,15 @@ export function FileDrop({ accept, title, hint, multiple = false, onFiles }: Fil
       onDragLeave={() => setOver(false)}
       onDrop={handleDrop}
       className={cn(
-        'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-[1.5px] border-dashed px-6 py-8 text-center transition-colors duration-120 ease-out has-focus-visible:shadow-focus hover:border-accent hover:bg-accent-soft hover:text-accent',
+        'flex cursor-pointer flex-col items-center justify-center gap-1 rounded-md border-[1.5px] border-dashed px-6 py-8 text-center transition-colors duration-120 ease-out has-focus-visible:shadow-focus hover:border-accent hover:bg-accent-soft hover:text-accent',
         over
           ? 'border-accent bg-accent-soft text-accent'
           : 'border-line-strong bg-surface text-ink-muted',
       )}
     >
-      <Upload aria-hidden="true" className="size-6" />
+      <span className="mb-2">
+        <IconTile icon={Upload} size={48} tone="active" />
+      </span>
       <span className="text-body-strong text-ink">{title}</span>
       {hint && <span className="text-caption text-ink-muted">{hint}</span>}
       <input

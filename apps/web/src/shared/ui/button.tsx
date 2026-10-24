@@ -11,7 +11,10 @@ export const buttonVariants = cva(
       variant: {
         primary: 'border-accent bg-accent text-on-accent hover:brightness-110',
         secondary: 'border-line-strong bg-surface text-ink hover:bg-surface-sunken',
-        ghost: 'border-transparent bg-transparent text-ink-muted hover:text-ink',
+        ghost:
+          'border-transparent bg-transparent text-ink-muted hover:text-ink disabled:border-transparent disabled:bg-transparent aria-disabled:border-transparent aria-disabled:bg-transparent',
+        'ghost-danger':
+          'border-transparent bg-transparent text-negative hover:bg-risk-high-soft disabled:border-transparent disabled:bg-transparent aria-disabled:border-transparent aria-disabled:bg-transparent',
         danger: 'border-negative bg-surface text-negative hover:bg-risk-high-soft',
       },
       size: {
