@@ -96,7 +96,7 @@ class IngestWriter {
         for (int index = 0; index < bound.size(); index++) {
             Object value = row.get(bound.get(index));
             if (value == null) {
-                statement.setNull(index + 1, Types.TIMESTAMP_WITH_TIMEZONE);
+                statement.setNull(index + 1, Types.NULL);
             } else {
                 statement.setObject(index + 1, value);
             }

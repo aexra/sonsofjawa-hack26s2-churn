@@ -237,6 +237,32 @@ class SourceIngestIT extends IntegrationTest {
     }
 
     @Test
+    void aRequestLargerThanOneBatchIsAppliedAndTheSequenceFollowsTheLargestId() throws Exception {
+        StringBuilder rows = new StringBuilder("id,email,balance\n");
+        for (int i = 0; i < 2500; i++) {
+            rows.append(1000 + i)
+                    .append(",bulk-")
+                    .append(i)
+                    .append("@example.test,")
+                    .append(i)
+                    .append('\n');
+        }
+
+        HttpResponse<String> response = post("/api/v1/source/accounts", CSV, rows.toString());
+        HttpResponse<String> next =
+                post("/api/v1/source/accounts", APPLICATION_JSON, "[{\"email\":\"after-bulk@example.test\"}]");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(tree(response).get("rowsApplied").asInt()).isEqualTo(2500);
+        assertThat(count("accounts")).isEqualTo(2501);
+        assertThat(jdbc.queryForObject("select balance from accounts where id = 3499", Long.class))
+                .isEqualTo(2499L);
+        assertThat(next.statusCode()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("select id from accounts where email = 'after-bulk@example.test'", Long.class))
+                .isEqualTo(3500L);
+    }
+
+    @Test
     void anInsertedServiceGetsTheModelClockAsCreationTime() throws Exception {
         IngestSupport.loadReference(jdbc);
 

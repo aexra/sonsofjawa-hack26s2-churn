@@ -5,6 +5,8 @@ import java.util.List;
 
 final class CsvReader {
 
+    private static final String BOM = "\uFEFF";
+
     record Table(List<String> header, List<List<String>> records) {}
 
     static final class CsvFormatException extends RuntimeException {
@@ -17,7 +19,7 @@ final class CsvReader {
     private CsvReader() {}
 
     static Table read(String input) {
-        String text = input.startsWith("﻿") ? input.substring(1) : input;
+        String text = input.startsWith(BOM) ? input.substring(1) : input;
         List<List<String>> records = new ArrayList<>();
         List<String> fields = new ArrayList<>();
         StringBuilder cell = new StringBuilder();

@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -162,7 +163,7 @@ public class IngestService {
     private List<Map<String, Object>> readJson(byte[] body) {
         try {
             List<Map<String, Object>> rows = json.readValue(body, ROWS);
-            if (rows == null || rows.stream().anyMatch(java.util.Objects::isNull)) {
+            if (rows == null || rows.stream().anyMatch(Objects::isNull)) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "validation_failed", "body must be an array of objects");
             }
             return rows;
