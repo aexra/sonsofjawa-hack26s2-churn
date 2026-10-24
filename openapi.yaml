@@ -1,0 +1,1557 @@
+openapi: 3.1.0
+info:
+  title: churn analyzer api
+  version: 1.0.0
+  license:
+    name: proprietary
+    identifier: LicenseRef-proprietary
+  description: |
+    API анализатора рисков оттока: рейтинг клиентов с оценками риска, причины, денежная оценка,
+    настройки модели, загрузка данных, живые события, администрирование.
+
+    Деньги — целые евроценты (x-unit: eurocent). Время — ISO 8601 UTC.
+    Ошибки — RFC 9457 application/problem+json с полем code.
+servers:
+  - url: /
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+  - basicAuth: []
+tags:
+  - name: auth
+    description: local login, session, current user
+  - name: oidc
+    description: sso login handled by the security filter chain (no generated interface)
+  - name: customers
+    description: risk rating and customer details
+  - name: analytics
+    description: summary and churn chart
+  - name: model
+    description: coefficients, thresholds, model clock, revisions
+  - name: recalc
+    description: manual recalculation and status
+  - name: source
+    description: data ingestion (hand-written controller - multiple body formats)
+  - name: events
+    description: server-sent events (hand-written controller)
+  - name: admin
+    description: users and bot api keys
+  - name: system
+    description: actuator endpoints (not generated)
+
+paths:
+  /api/v1/auth/providers:
+    get:
+      tags: [auth]
+      operationId: getAuthProviders
+      summary: available login methods
+      security: []
+      responses:
+        '200':
+          description: login methods
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthProviders' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: log in with login and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: logged in; sets churn_at and churn_rt cookies
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentUser' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: account_disabled or local_auth_disabled
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      summary: rotate refresh token and issue new access token
+      security: []
+      responses:
+        '200':
+          description: new cookies
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: end current session
+      responses:
+        '204': { description: 'logged out; cookies cleared' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: current principal
+      responses:
+        '200':
+          description: current user, or api key principal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/auth/oidc/login:
+    get:
+      tags: [oidc]
+      operationId: oidcLogin
+      summary: start sso login (redirect to provider)
+      security: []
+      responses:
+        '302': { description: 'redirect to provider authorization endpoint' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/auth/oidc/callback:
+    get:
+      tags: [oidc]
+      operationId: oidcCallback
+      summary: sso callback (handled by security filter)
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        '302': { description: 'redirect to web root or to /login?error=<code>' }
+
+  /api/v1/customers:
+    get:
+      tags: [customers]
+      operationId: listCustomers
+      summary: customers with risk scores; filtering, sorting, field selection
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/CustomerSort'
+        - $ref: '#/components/parameters/CustomerFields'
+        - $ref: '#/components/parameters/LevelFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/MinScore'
+        - $ref: '#/components/parameters/MaxScore'
+        - $ref: '#/components/parameters/MinLoss'
+        - $ref: '#/components/parameters/HasAnomalies'
+      responses:
+        '200':
+          description: page of customers
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/customers/export:
+    get:
+      tags: [customers]
+      operationId: exportCustomers
+      summary: same filters as list, csv with columns in requested order, up to 100000 rows
+      parameters:
+        - $ref: '#/components/parameters/CustomerSort'
+        - $ref: '#/components/parameters/CustomerFields'
+        - $ref: '#/components/parameters/LevelFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/MinScore'
+        - $ref: '#/components/parameters/MaxScore'
+        - $ref: '#/components/parameters/MinLoss'
+        - $ref: '#/components/parameters/HasAnomalies'
+      responses:
+        '200':
+          description: csv file
+          content:
+            text/csv:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/customers/{id}:
+    get:
+      tags: [customers]
+      operationId: getCustomer
+      summary: detailed score, services, transactions, reasons
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: customer details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerDetails' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/customers/{id}/history:
+    get:
+      tags: [customers]
+      operationId: getCustomerHistory
+      summary: score history of a customer
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 5000, default: 1000 } }
+      responses:
+        '200':
+          description: history points, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ScoreHistoryPoint' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/analytics/summary:
+    get:
+      tags: [analytics]
+      operationId: getAnalyticsSummary
+      summary: aggregated risk and money estimate
+      responses:
+        '200':
+          description: summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/analytics/churn-chart:
+    get:
+      tags: [analytics]
+      operationId: getChurnChart
+      summary: daily facts (deletions) and forecast (expected non-renewals)
+      parameters:
+        - { name: pastDays, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 90 } }
+        - { name: futureDays, in: query, description: 'defaults to model horizon', schema: { type: integer, minimum: 1, maximum: 365 } }
+      responses:
+        '200':
+          description: chart points
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChurnChart' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/model/settings:
+    get:
+      tags: [model]
+      operationId: getModelSettings
+      summary: current model coefficients, thresholds, clock and feature catalog
+      responses:
+        '200':
+          description: settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [model]
+      operationId: updateModelSettings
+      summary: change settings and/or clock; triggers full recalculation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModelSettingsPatch' }
+      responses:
+        '200':
+          description: new settings with new model version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelSettingsUpdated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/model/revisions:
+    get:
+      tags: [model]
+      operationId: listModelRevisions
+      summary: model revisions, newest first
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200':
+          description: revisions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ModelRevision' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/recalc:
+    post:
+      tags: [recalc]
+      operationId: requestRecalc
+      summary: process pending delta now (scope=all enqueues every account first)
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [pending, all], default: pending } }
+      responses:
+        '202':
+          description: accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecalcAccepted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/recalc/status:
+    get:
+      tags: [recalc]
+      operationId: getRecalcStatus
+      summary: whether recalculation is running, pending delta, recent runs
+      responses:
+        '200':
+          description: status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecalcStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/source/snapshot:
+    put:
+      tags: [source]
+      operationId: replaceSnapshot
+      summary: load or fully replace source snapshot; triggers recalculation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SnapshotInput' }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [accounts, services, transactions]
+              properties:
+                accounts: { type: string, format: binary, description: 'accounts.csv' }
+                services: { type: string, format: binary, description: 'services.csv' }
+                transactions: { type: string, format: binary, description: 'transactions.csv' }
+      responses:
+        '200':
+          description: snapshot replaced
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/source/accounts:
+    get:
+      tags: [source]
+      operationId: listSourceAccounts
+      summary: read source accounts (for editing)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Ids'
+      responses:
+        '200':
+          description: page of accounts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [source]
+      operationId: upsertAccounts
+      summary: insert or update accounts by id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/AccountInput' }
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/source/services:
+    get:
+      tags: [source]
+      operationId: listSourceServices
+      summary: read source services (for editing)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Ids'
+        - { name: ownerId, in: query, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: page of services
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServicePage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [source]
+      operationId: upsertServices
+      summary: insert or update services by id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/ServiceInput' }
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/source/transactions:
+    get:
+      tags: [source]
+      operationId: listSourceTransactions
+      summary: read source transactions (for editing)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Ids'
+        - { name: serviceId, in: query, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: page of transactions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransactionPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [source]
+      operationId: upsertTransactions
+      summary: insert or update transactions by id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/TransactionInput' }
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/source/ingest-log:
+    get:
+      tags: [source]
+      operationId: listIngestLog
+      summary: upload journal, newest first
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: page of entries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestLogPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/events:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: server-sent events (recalc.started, recalc.completed, recalc.failed, model.updated, ingest.completed)
+      responses:
+        '200':
+          description: event stream; data of each event is JSON described by LiveEvent
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/LiveEvent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/admin/users:
+    get:
+      tags: [admin]
+      operationId: listUsers
+      summary: all users
+      responses:
+        '200':
+          description: users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [admin]
+      operationId: createUser
+      summary: create local user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreate' }
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/users/{id}:
+    patch:
+      tags: [admin]
+      operationId: updateUser
+      summary: change role, enabled flag, display name or password (local users)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserPatch' }
+      responses:
+        '200':
+          description: updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [admin]
+      operationId: deleteUser
+      summary: delete user (not self, not last admin)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: 'deleted' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/admin/api-keys:
+    get:
+      tags: [admin]
+      operationId: listApiKeys
+      summary: bot api keys (secrets are never returned)
+      responses:
+        '200':
+          description: keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApiKey' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [admin]
+      operationId: createApiKey
+      summary: issue a key; the secret is shown once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApiKeyCreate' }
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiKeyCreated' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/v1/admin/api-keys/{id}:
+    delete:
+      tags: [admin]
+      operationId: revokeApiKey
+      summary: revoke key
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: 'revoked' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /metrics:
+    get:
+      tags: [system]
+      operationId: getMetrics
+      summary: prometheus metrics (api key with metrics scope, or admin session)
+      responses:
+        '200':
+          description: prometheus text exposition format
+          content:
+            text/plain:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: liveness
+      security: []
+      responses:
+        '200':
+          description: up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [UP, DOWN] }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: churn_at
+      description: browser session; unsafe methods also need X-XSRF-TOKEN header equal to XSRF-TOKEN cookie
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: bot api key ck_<prefix>_<secret>
+    basicAuth:
+      type: http
+      scheme: basic
+      description: any username, password is the full bot api key
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 25 }
+    Ids:
+      name: ids
+      in: query
+      style: form
+      explode: false
+      schema:
+        type: array
+        maxItems: 500
+        items: { type: integer, format: int64 }
+    CustomerSort:
+      name: sort
+      in: query
+      description: '<field>,<asc|desc>; repeatable; id,asc is always appended; nulls last'
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: { type: string, pattern: '^[a-zA-Z]+,(asc|desc)$' }
+        default: ['riskScore,desc']
+    CustomerFields:
+      name: fields
+      in: query
+      description: field set and order of each item; default id,email,balance,totalReplenished,riskScore,riskLevel,topReason,expectedLoss
+      style: form
+      explode: false
+      schema:
+        type: array
+        items: { $ref: '#/components/schemas/CustomerField' }
+    LevelFilter:
+      name: level
+      in: query
+      style: form
+      explode: false
+      schema:
+        type: array
+        items: { $ref: '#/components/schemas/RiskLevel' }
+    StatusFilter:
+      name: status
+      in: query
+      style: form
+      explode: false
+      schema:
+        type: array
+        items: { $ref: '#/components/schemas/ScoreStatus' }
+    Query:
+      name: q
+      in: query
+      description: case-insensitive email substring or exact id
+      schema: { type: string, maxLength: 200 }
+    MinScore:
+      name: minScore
+      in: query
+      schema: { type: number, minimum: 0, maximum: 100 }
+    MaxScore:
+      name: maxScore
+      in: query
+      schema: { type: number, minimum: 0, maximum: 100 }
+    MinLoss:
+      name: minLoss
+      in: query
+      description: eurocents
+      schema: { type: integer, format: int64, minimum: 0 }
+    HasAnomalies:
+      name: hasAnomalies
+      in: query
+      schema: { type: boolean }
+
+  responses:
+    BadRequest:
+      description: invalid_field, invalid_sort, invalid_filter, malformed request
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: unauthenticated, invalid_credentials, refresh_invalid
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: forbidden, csrf_invalid
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: not_found
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: conflict, last_admin
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PayloadTooLarge:
+      description: payload_too_large
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UnsupportedMediaType:
+      description: unsupported_media_type
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unprocessable:
+      description: validation_failed with row/field errors
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, default: about:blank }
+        title: { type: string }
+        status: { type: integer }
+        code:
+          type: string
+          enum: [unauthenticated, forbidden, local_auth_disabled, invalid_credentials, account_disabled,
+                 refresh_invalid, csrf_invalid, not_found, invalid_field, invalid_sort, invalid_filter,
+                 validation_failed, payload_too_large, unsupported_media_type, conflict, last_admin, internal]
+        detail: { type: string }
+        requestId: { type: string }
+        errors:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/FieldError' }
+
+    FieldError:
+      type: object
+      required: [code, message]
+      properties:
+        row: { type: integer, description: '1-based data row (csv header excluded)' }
+        entity: { type: string, enum: [accounts, services, transactions] }
+        field: { type: string }
+        code: { type: string }
+        message: { type: string }
+
+    Role:
+      type: string
+      enum: [user, admin]
+
+    AuthProvider:
+      type: string
+      enum: [local, oidc, api_key]
+
+    ApiKeyScope:
+      type: string
+      enum: [read, ingest, metrics]
+
+    AuthProviders:
+      type: object
+      required: [local, oidc]
+      properties:
+        local:
+          type: object
+          required: [enabled]
+          properties:
+            enabled: { type: boolean }
+        oidc:
+          type: object
+          required: [enabled]
+          properties:
+            enabled: { type: boolean }
+            displayName: { type: string, examples: [keycloak] }
+            loginUrl: { type: string, examples: [/api/v1/auth/oidc/login] }
+
+    LoginRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login: { type: string, minLength: 1, maxLength: 100 }
+        password: { type: string, minLength: 1, maxLength: 200 }
+
+    CurrentUser:
+      type: object
+      required: [login, authProvider]
+      properties:
+        id: { type: integer, format: int64, description: 'absent for api keys' }
+        login: { type: string, description: 'user login, or key name for api keys' }
+        email: { type: [string, 'null'] }
+        displayName: { type: [string, 'null'] }
+        role: { $ref: '#/components/schemas/Role' }
+        authProvider: { $ref: '#/components/schemas/AuthProvider' }
+        scopes:
+          type: array
+          items: { $ref: '#/components/schemas/ApiKeyScope' }
+
+    RiskLevel:
+      type: string
+      enum: [high, medium, low]
+
+    ScoreStatus:
+      type: string
+      enum: [scored, no_score, pending]
+
+    NoScoreReason:
+      type: string
+      enum: [no_services, no_live_services]
+
+    CustomerField:
+      type: string
+      enum: [id, email, balance, withdrawBalance, totalReplenished, bonusBalance, bonusState,
+             scoreStatus, noScoreReason, riskScore, riskLevel, loyalty, expectedLoss, revenueHorizon,
+             securedAmount, servicesTotal, servicesLive, servicesAtRisk, nextExpiryAt, topReason,
+             reasons, anomalies, calculatedAt, asOf, modelVersion]
+
+    Reason:
+      type: object
+      required: [key, title, text, value, weight, contribution, params]
+      properties:
+        key: { type: string, examples: [renewal_unsecured] }
+        title: { type: string, examples: [продление не обеспечено] }
+        text: { type: string, examples: ['услуга service-0001 не продлится автоматически: срок истекает через 1 ч'] }
+        value: { type: number, minimum: 0, maximum: 1 }
+        weight: { type: number }
+        contribution: { type: number, description: 'points of risk score' }
+        params:
+          type: object
+          additionalProperties: true
+
+    CustomerRow:
+      type: object
+      description: only requested fields are present, in requested order
+      additionalProperties: false
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string }
+        balance: { type: integer, format: int64, x-unit: eurocent }
+        withdrawBalance: { type: integer, format: int64, x-unit: eurocent }
+        totalReplenished: { type: integer, format: int64, x-unit: eurocent }
+        bonusBalance: { type: integer, format: int64, x-unit: eurocent }
+        bonusState: { type: string, enum: [locked, unlocked] }
+        scoreStatus: { $ref: '#/components/schemas/ScoreStatus' }
+        noScoreReason: { oneOf: [{ $ref: '#/components/schemas/NoScoreReason' }, { type: 'null' }] }
+        riskScore: { type: [number, 'null'] }
+        riskLevel: { oneOf: [{ $ref: '#/components/schemas/RiskLevel' }, { type: 'null' }] }
+        loyalty: { type: [number, 'null'] }
+        expectedLoss: { type: [integer, 'null'], format: int64, x-unit: eurocent }
+        revenueHorizon: { type: [integer, 'null'], format: int64, x-unit: eurocent }
+        securedAmount: { type: [integer, 'null'], format: int64, x-unit: eurocent }
+        servicesTotal: { type: [integer, 'null'] }
+        servicesLive: { type: [integer, 'null'] }
+        servicesAtRisk: { type: [integer, 'null'] }
+        nextExpiryAt: { type: [string, 'null'], format: date-time }
+        topReason: { oneOf: [{ $ref: '#/components/schemas/Reason' }, { type: 'null' }] }
+        reasons:
+          type: array
+          items: { $ref: '#/components/schemas/Reason' }
+        anomalies:
+          type: array
+          items: { $ref: '#/components/schemas/Anomaly' }
+        calculatedAt: { type: [string, 'null'], format: date-time }
+        asOf: { type: [string, 'null'], format: date-time }
+        modelVersion: { type: [integer, 'null'], format: int64 }
+
+    Anomaly:
+      type: string
+      enum: [expired_but_live, overdue_prolong_wait, withdraw_exceeds_balance, balance_exceeds_replenished]
+
+    PageMeta:
+      type: object
+      required: [page, size, totalItems, totalPages]
+      properties:
+        page: { type: integer }
+        size: { type: integer }
+        totalItems: { type: integer, format: int64 }
+        totalPages: { type: integer }
+
+    CustomerPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items, fields, sort]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/CustomerRow' }
+            fields:
+              type: array
+              items: { $ref: '#/components/schemas/CustomerField' }
+            sort:
+              type: array
+              items: { type: string }
+
+    Account:
+      type: object
+      required: [id, email, balance, withdrawBalance, totalReplenished, bonusBalance, bonusState]
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string }
+        balance: { type: integer, format: int64, minimum: 0, x-unit: eurocent }
+        withdrawBalance: { type: integer, format: int64, minimum: 0, x-unit: eurocent }
+        totalReplenished: { type: integer, format: int64, minimum: 0, x-unit: eurocent }
+        bonusBalance: { type: integer, format: int64, minimum: 0, x-unit: eurocent }
+        bonusState: { type: string, enum: [locked, unlocked] }
+
+    PaymentTerm:
+      type: string
+      enum: [hour, week, month, quarter_year, half_year, year]
+
+    ServiceStatus:
+      type: string
+      enum: [active, blocked, deleted, suspended, prolong_wait]
+
+    Service:
+      type: object
+      required: [id, name, ownerId, paymentTerm, autoProlong, createdAt, expiresAt, status, price]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string, pattern: '^[A-Za-z0-9-]+$' }
+        ownerId: { type: integer, format: int64 }
+        paymentTerm: { $ref: '#/components/schemas/PaymentTerm' }
+        autoProlong: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+        price: { type: integer, format: int64, minimum: 0, x-unit: eurocent }
+
+    TransactionStatus:
+      type: string
+      enum: [not_performed, performed]
+
+    TransactionType:
+      type: string
+      enum: [prolong, order]
+
+    Transaction:
+      type: object
+      required: [id, amount, status, createdAt, type, serviceId]
+      properties:
+        id: { type: integer, format: int64 }
+        amount: { type: integer, minimum: 0, maximum: 1000 }
+        status: { $ref: '#/components/schemas/TransactionStatus' }
+        performedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        type: { $ref: '#/components/schemas/TransactionType' }
+        serviceId: { type: integer, format: int64 }
+
+    AccountInput:
+      type: object
+      required: [email]
+      properties:
+        id: { type: integer, format: int64, description: 'omitted - new id is generated' }
+        email: { type: string, maxLength: 320 }
+        balance: { type: integer, format: int64, minimum: 0, default: 0 }
+        withdrawBalance: { type: integer, format: int64, minimum: 0, default: 0 }
+        totalReplenished: { type: integer, format: int64, minimum: 0, default: 0 }
+        bonusBalance: { type: integer, format: int64, minimum: 0, default: 0 }
+        bonusState: { type: string, enum: [locked, unlocked], default: locked }
+
+    ServiceInput:
+      type: object
+      required: [name, ownerId, paymentTerm, expiresAt, status, price]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string, pattern: '^[A-Za-z0-9-]+$' }
+        ownerId: { type: integer, format: int64 }
+        paymentTerm: { $ref: '#/components/schemas/PaymentTerm' }
+        autoProlong: { type: boolean, default: false }
+        createdAt: { type: string, format: date-time, description: 'defaults to model now' }
+        expiresAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+        price: { type: integer, format: int64, minimum: 0 }
+
+    TransactionInput:
+      type: object
+      required: [amount, type, serviceId]
+      properties:
+        id: { type: integer, format: int64 }
+        amount: { type: integer, minimum: 0, maximum: 1000 }
+        status: { $ref: '#/components/schemas/TransactionStatus' }
+        performedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time, description: 'defaults to model now' }
+        type: { $ref: '#/components/schemas/TransactionType' }
+        serviceId: { type: integer, format: int64 }
+
+    SnapshotInput:
+      type: object
+      description: same shape as tmplt/data.json
+      required: [accounts, services, transactions]
+      properties:
+        accounts:
+          type: array
+          items: { $ref: '#/components/schemas/AccountInput' }
+        services:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceInput' }
+        transactions:
+          type: array
+          items: { $ref: '#/components/schemas/TransactionInput' }
+
+    AccountPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Account' }
+
+    ServicePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Service' }
+
+    TransactionPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/Transaction' }
+
+    IngestResult:
+      type: object
+      required: [mode, entity, format, rowsReceived, rowsApplied, recalc]
+      properties:
+        logId: { type: integer, format: int64 }
+        mode: { type: string, enum: [upsert, snapshot] }
+        entity: { type: string, enum: [accounts, services, transactions, snapshot] }
+        format: { type: string, enum: [json, csv] }
+        rowsReceived: { type: integer }
+        rowsApplied: { type: integer }
+        applied:
+          type: object
+          properties:
+            accounts: { type: integer }
+            services: { type: integer }
+            transactions: { type: integer }
+        recalc: { $ref: '#/components/schemas/RecalcAccepted' }
+
+    IngestLogEntry:
+      type: object
+      required: [id, receivedAt, actor, channel, mode, entity, format, rowsReceived, rowsApplied, status, errors]
+      properties:
+        id: { type: integer, format: int64 }
+        receivedAt: { type: string, format: date-time }
+        actor: { type: string }
+        channel: { type: string, enum: [api, web] }
+        mode: { type: string, enum: [upsert, snapshot] }
+        entity: { type: string, enum: [accounts, services, transactions, snapshot] }
+        format: { type: string, enum: [json, csv] }
+        rowsReceived: { type: integer }
+        rowsApplied: { type: integer }
+        status: { type: string, enum: [ok, rejected] }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/FieldError' }
+
+    IngestLogPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/IngestLogEntry' }
+
+    CustomerScore:
+      type: object
+      required: [status, reasons, features, anomalies]
+      properties:
+        status: { $ref: '#/components/schemas/ScoreStatus' }
+        noScoreReason: { oneOf: [{ $ref: '#/components/schemas/NoScoreReason' }, { type: 'null' }] }
+        riskScore: { type: [number, 'null'] }
+        riskLevel: { oneOf: [{ $ref: '#/components/schemas/RiskLevel' }, { type: 'null' }] }
+        loyalty: { type: [number, 'null'] }
+        probability: { type: [number, 'null'], description: 'riskScore / 100' }
+        revenueHorizon: { type: [integer, 'null'], format: int64, x-unit: eurocent }
+        securedAmount: { type: [integer, 'null'], format: int64, x-unit: eurocent }
+        uncoveredAmount: { type: [integer, 'null'], format: int64, x-unit: eurocent }
+        expectedLoss: { type: [integer, 'null'], format: int64, x-unit: eurocent }
+        horizonDays: { type: integer }
+        servicesTotal: { type: integer }
+        servicesLive: { type: integer }
+        servicesAtRisk: { type: integer }
+        nextExpiryAt: { type: [string, 'null'], format: date-time }
+        calculatedAt: { type: [string, 'null'], format: date-time }
+        asOf: { type: [string, 'null'], format: date-time }
+        validUntil: { type: [string, 'null'], format: date-time }
+        modelVersion: { type: [integer, 'null'], format: int64 }
+        reasons:
+          type: array
+          items: { $ref: '#/components/schemas/Reason' }
+        features:
+          type: array
+          description: all features including zero ones, in catalog order
+          items: { $ref: '#/components/schemas/FeatureValue' }
+        anomalies:
+          type: array
+          items: { $ref: '#/components/schemas/Anomaly' }
+
+    FeatureValue:
+      type: object
+      required: [key, title, value, weight, contribution]
+      properties:
+        key: { type: string }
+        title: { type: string }
+        value: { type: number }
+        weight: { type: number }
+        contribution: { type: number }
+
+    ServiceView:
+      allOf:
+        - $ref: '#/components/schemas/Service'
+        - type: object
+          required: [isLive, atRisk]
+          properties:
+            isLive: { type: boolean }
+            daysLeft: { type: [number, 'null'] }
+            revenueHorizon: { type: integer, format: int64, x-unit: eurocent }
+            atRisk: { type: boolean }
+
+    CustomerDetails:
+      type: object
+      required: [account, score, services, transactions]
+      properties:
+        account: { $ref: '#/components/schemas/Account' }
+        score: { $ref: '#/components/schemas/CustomerScore' }
+        services:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceView' }
+        transactions:
+          type: object
+          required: [items, total, notPerformed]
+          properties:
+            items:
+              type: array
+              description: last 50, newest first
+              items: { $ref: '#/components/schemas/Transaction' }
+            total: { type: integer }
+            notPerformed: { type: integer }
+
+    ScoreHistoryPoint:
+      type: object
+      required: [calculatedAt, asOf, status, modelVersion]
+      properties:
+        calculatedAt: { type: string, format: date-time }
+        asOf: { type: string, format: date-time }
+        status: { type: string, enum: [scored, no_score, removed] }
+        riskScore: { type: [number, 'null'] }
+        riskLevel: { oneOf: [{ $ref: '#/components/schemas/RiskLevel' }, { type: 'null' }] }
+        expectedLoss: { type: [integer, 'null'], format: int64, x-unit: eurocent }
+        modelVersion: { type: integer, format: int64 }
+
+    AnalyticsSummary:
+      type: object
+      required: [asOf, modelVersion, horizonDays, currency, accounts, money, servicesAtRisk, scoreHistogram, topReasons]
+      properties:
+        asOf: { type: string, format: date-time }
+        calculatedAt: { type: [string, 'null'], format: date-time }
+        modelVersion: { type: integer, format: int64 }
+        horizonDays: { type: integer }
+        currency: { type: string, const: EUR }
+        accounts:
+          type: object
+          required: [total, scored, high, medium, low, noScore, pending]
+          properties:
+            total: { type: integer }
+            scored: { type: integer }
+            high: { type: integer }
+            medium: { type: integer }
+            low: { type: integer }
+            noScore: { type: integer }
+            pending: { type: integer }
+        money:
+          type: object
+          required: [expectedLoss, revenueHorizon, revenueAtRisk, securedAmount]
+          properties:
+            expectedLoss: { type: integer, format: int64, x-unit: eurocent }
+            revenueHorizon: { type: integer, format: int64, x-unit: eurocent }
+            revenueAtRisk: { type: integer, format: int64, x-unit: eurocent, description: 'revenue of high level customers' }
+            securedAmount: { type: integer, format: int64, x-unit: eurocent }
+        avgRiskScore: { type: [number, 'null'] }
+        servicesAtRisk: { type: integer }
+        scoreHistogram:
+          type: array
+          description: 10 buckets of 10 points
+          items:
+            type: object
+            required: [from, to, count]
+            properties:
+              from: { type: integer }
+              to: { type: integer }
+              count: { type: integer }
+        topReasons:
+          type: array
+          description: features by number of customers where the feature is the top reason
+          items:
+            type: object
+            required: [key, title, customers, contributionSum]
+            properties:
+              key: { type: string }
+              title: { type: string }
+              customers: { type: integer }
+              contributionSum: { type: number }
+        lastRecalc: { oneOf: [{ $ref: '#/components/schemas/RecalcRun' }, { type: 'null' }] }
+
+    ChurnChart:
+      type: object
+      required: [asOf, horizonDays, points]
+      properties:
+        asOf: { type: string, format: date-time }
+        horizonDays: { type: integer }
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/ChurnChartPoint' }
+
+    ChurnChartPoint:
+      type: object
+      required: [date, kind]
+      properties:
+        date: { type: string, format: date }
+        kind: { type: string, enum: [fact, today, forecast] }
+        deletions: { type: [integer, 'null'], description: 'observed deletions (fact)' }
+        deletionsEstimated: { type: [integer, 'null'], description: 'deletions estimated as expiresAt + grace (fact)' }
+        servicesAtRisk: { type: [integer, 'null'], description: 'last snapshot of the day (fact, today)' }
+        expectedNonRenewals: { type: [number, 'null'], description: 'sum of probabilities (forecast, today)' }
+        expectedLossAmount: { type: [integer, 'null'], format: int64, x-unit: eurocent, description: 'forecast revenue loss of the day' }
+
+    ModelSetting:
+      type: object
+      required: [key, value, defaultValue, min, max, unit, title, description]
+      properties:
+        key: { type: string }
+        value: { type: number }
+        defaultValue: { type: number }
+        min: { type: number }
+        max: { type: number }
+        unit: { type: string, enum: [points, days, hours, count] }
+        title: { type: string }
+        description: { type: string }
+        share: { type: [number, 'null'], description: 'for weights - value / sum of weights' }
+
+    SettingsGroup:
+      type: object
+      required: [key, settings]
+      properties:
+        key: { type: string, enum: [weights, levels, horizon, quality] }
+        settings:
+          type: array
+          items: { $ref: '#/components/schemas/ModelSetting' }
+
+    ModelFeature:
+      type: object
+      required: [key, weightKey, title, description, reasonTemplate]
+      properties:
+        key: { type: string }
+        weightKey: { type: string }
+        title: { type: string }
+        description: { type: string }
+        reasonTemplate: { type: string }
+
+    ClockMode:
+      type: string
+      enum: [real, frozen, shifted]
+
+    ModelClock:
+      type: object
+      required: [mode, asOf]
+      properties:
+        mode: { $ref: '#/components/schemas/ClockMode' }
+        asOf: { type: string, format: date-time, description: 'current model time' }
+        frozenAt: { type: [string, 'null'], format: date-time }
+        shiftSeconds: { type: integer, format: int64 }
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: string }
+
+    ModelSettings:
+      type: object
+      required: [modelVersion, clock, groups, features]
+      properties:
+        modelVersion: { type: integer, format: int64 }
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: string }
+        clock: { $ref: '#/components/schemas/ModelClock' }
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/SettingsGroup' }
+        features:
+          type: array
+          items: { $ref: '#/components/schemas/ModelFeature' }
+
+    ModelSettingsPatch:
+      type: object
+      properties:
+        values:
+          type: object
+          description: setting key -> new value
+          additionalProperties: { type: number }
+        clock:
+          type: object
+          required: [mode]
+          properties:
+            mode: { $ref: '#/components/schemas/ClockMode' }
+            asOf:
+              type: string
+              format: date-time
+              description: required for frozen (frozen moment) and shifted (desired current model time)
+
+    ModelSettingsUpdated:
+      allOf:
+        - $ref: '#/components/schemas/ModelSettings'
+        - type: object
+          required: [recalc]
+          properties:
+            recalc: { $ref: '#/components/schemas/RecalcAccepted' }
+
+    ModelRevision:
+      type: object
+      required: [version, changedAt, changedBy, source, changes]
+      properties:
+        version: { type: integer, format: int64 }
+        changedAt: { type: string, format: date-time }
+        changedBy: { type: string }
+        source: { type: string, enum: [migration, settings, clock] }
+        changes:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    RecalcAccepted:
+      type: object
+      required: [state]
+      properties:
+        state: { type: string, enum: [scheduled, coalesced] }
+
+    RecalcRun:
+      type: object
+      required: [id, trigger, startedAt, status, accountsProcessed]
+      properties:
+        id: { type: integer, format: int64 }
+        trigger: { type: string, enum: [timer, manual, model, snapshot, ingest, notify] }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+        asOf: { type: [string, 'null'], format: date-time }
+        modelVersion: { type: [integer, 'null'], format: int64 }
+        accountsProcessed: { type: integer }
+        status: { type: string, enum: [running, ok, failed] }
+        error: { type: [string, 'null'] }
+
+    RecalcStatus:
+      type: object
+      required: [running, pendingAccounts, recentRuns]
+      properties:
+        running: { type: boolean }
+        pendingAccounts: { type: integer }
+        lastRun: { oneOf: [{ $ref: '#/components/schemas/RecalcRun' }, { type: 'null' }] }
+        recentRuns:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/RecalcRun' }
+
+    LiveEvent:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [recalc.started, recalc.completed, recalc.failed, model.updated, ingest.completed] }
+        runId: { type: integer, format: int64 }
+        trigger: { type: string }
+        accountsProcessed: { type: integer }
+        modelVersion: { type: integer, format: int64 }
+        asOf: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        error: { type: string }
+        source: { type: string }
+        entity: { type: string }
+        mode: { type: string }
+        rowsApplied: { type: integer }
+
+    User:
+      type: object
+      required: [id, login, role, authProvider, enabled, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        login: { type: string }
+        email: { type: [string, 'null'] }
+        displayName: { type: [string, 'null'] }
+        role: { $ref: '#/components/schemas/Role' }
+        authProvider: { type: string, enum: [local, oidc] }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+
+    UserCreate:
+      type: object
+      required: [login, password, role]
+      properties:
+        login: { type: string, pattern: '^[a-z0-9._-]{3,64}$' }
+        password: { type: string, minLength: 8, maxLength: 200 }
+        role: { $ref: '#/components/schemas/Role' }
+        email: { type: string, maxLength: 320 }
+        displayName: { type: string, maxLength: 200 }
+
+    UserPatch:
+      type: object
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+        enabled: { type: boolean }
+        displayName: { type: string, maxLength: 200 }
+        email: { type: string, maxLength: 320 }
+        password: { type: string, minLength: 8, maxLength: 200, description: 'local users only' }
+
+    ApiKey:
+      type: object
+      required: [id, name, prefix, scopes, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        prefix: { type: string, pattern: '^[a-z0-9]{8}$' }
+        scopes:
+          type: array
+          items: { $ref: '#/components/schemas/ApiKeyScope' }
+        createdBy: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+
+    ApiKeyCreate:
+      type: object
+      required: [name, scopes]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ApiKeyScope' }
+        expiresAt: { type: string, format: date-time }
+
+    ApiKeyCreated:
+      type: object
+      required: [key, secret]
+      properties:
+        key: { $ref: '#/components/schemas/ApiKey' }
+        secret: { type: string, description: 'full key ck_<prefix>_<secret>; shown once', examples: [ck_a1b2c3d4_Zx9...] }

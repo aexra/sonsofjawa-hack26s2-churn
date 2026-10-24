@@ -14,8 +14,11 @@ class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(a ->
-                        a.requestMatchers("/health").permitAll().anyRequest().denyAll())
+                .authorizeHttpRequests(a -> a.requestMatchers(
+                                "/health", "/api/v1/docs/**", "/api/v1/swagger-ui/**", "/api/v1/openapi.yaml")
+                        .permitAll()
+                        .anyRequest()
+                        .denyAll())
                 .build();
     }
 }

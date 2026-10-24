@@ -6,6 +6,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,6 +54,35 @@ class ApplicationIT {
         Integer count = jdbc.queryForObject("select count(*) from public.accounts", Integer.class);
 
         assertThat(count).isZero();
+    }
+
+    @Test
+    void servedSpecificationMatchesRepositoryFile() throws Exception {
+        HttpResponse<String> response = get("/api/v1/openapi.yaml");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).isEqualTo(Files.readString(Path.of("../../openapi.yaml")));
+    }
+
+    @Test
+    void swaggerUiIsServed() throws Exception {
+        HttpClient following = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/docs"))
+                .build();
+
+        HttpResponse<String> response = following.send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("swagger-ui");
+    }
+
+    @Test
+    void generatedSpecificationEndpointIsDenied() throws Exception {
+        HttpResponse<String> response = get("/v3/api-docs");
+
+        assertThat(response.statusCode()).isIn(401, 403);
     }
 
     @Test

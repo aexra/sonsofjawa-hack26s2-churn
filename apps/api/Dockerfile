@@ -7,7 +7,9 @@ WORKDIR /src/apps/api
 COPY apps/api/gradlew apps/api/settings.gradle.kts apps/api/build.gradle.kts apps/api/gradle.properties ./
 COPY apps/api/gradle gradle
 RUN ./gradlew --no-daemon dependencies > /dev/null
+COPY openapi.yaml /src/openapi.yaml
 COPY apps/api/src src
+COPY apps/api/.openapi-generator-ignore ./
 RUN ./gradlew --no-daemon bootJar -x test
 
 FROM ${BASE_REGISTRY}/library/eclipse-temurin:25-jre

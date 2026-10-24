@@ -34,3 +34,12 @@ logging:
     root: ${LOG_LEVEL:INFO}
   pattern:
     correlation: "[%X{requestId:-}] "
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    url: /api/v1/openapi.yaml
+    path: /api/v1/docs
+    csrf:
+      enabled: true
