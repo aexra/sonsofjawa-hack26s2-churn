@@ -13,6 +13,9 @@ export const describeError = (error: FieldError): string => {
   if (error.code === 'unknown_reference') {
     return REFERENCE_FIELDS[error.field ?? ''] ?? error.message;
   }
+  if (error.code === 'before_created_at' && error.field === 'performedAt') {
+    return ru.ingest.cell.performedBeforeCreated;
+  }
   const codes: Record<string, string | undefined> = ru.ingest.errorCodes;
   return codes[error.code] ?? error.message;
 };

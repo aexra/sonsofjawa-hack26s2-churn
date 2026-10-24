@@ -30,12 +30,23 @@ export function CellEditor({ spec, rowNumber, value, error, onChange }: CellEdit
 
   if (spec.kind === 'boolean') {
     return (
-      <Switch
-        label={label}
-        hideLabel
-        checked={value === 'true'}
-        onCheckedChange={(checked) => onChange(checked ? 'true' : 'false')}
-      />
+      <>
+        <Tooltip content={error} open={error ? undefined : false}>
+          <Switch
+            label={label}
+            hideLabel
+            checked={value === 'true'}
+            onCheckedChange={(checked) => onChange(checked ? 'true' : 'false')}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? messageId : undefined}
+          />
+        </Tooltip>
+        {error && (
+          <span id={messageId} className="sr-only">
+            {error}
+          </span>
+        )}
+      </>
     );
   }
 
