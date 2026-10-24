@@ -15,3 +15,15 @@ export {
   type PageSize,
   type SortDir,
 } from './model/list-params';
+export {
+  useCustomer,
+  useCustomerHistory,
+  type CustomerAnomaly,
+  type CustomerDetails,
+  type CustomerScore,
+  type CustomerService,
+  type CustomerTransaction,
+  type ScoreHistoryPoint,
+} from './model/details';
+export { customerLinkState, listPathFrom } from './model/list-link';
+export { useModelThresholds } from './model/model-thresholds';
