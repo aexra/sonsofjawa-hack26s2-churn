@@ -18,10 +18,7 @@ export function KpiCard({ label, value, unit, hint, primary = false, onClick }: 
     <>
       <span className="text-label text-ink-muted">{label}</span>
       <span
-        className={cn(
-          'font-display text-kpi whitespace-nowrap tabular-nums',
-          primary ? 'text-risk-high' : 'text-ink',
-        )}
+        className={`font-display text-kpi whitespace-nowrap tabular-nums ${primary ? 'text-risk-high' : 'text-ink'}`}
       >
         {value}
         {unit && (
