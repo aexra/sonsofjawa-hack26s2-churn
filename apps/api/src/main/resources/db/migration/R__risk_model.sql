@@ -291,7 +291,9 @@ top_unsecured AS (
 ),
 tx_candidates AS (
     SELECT s."ownerId" AS account_id, t.status, t."createdAt" AS created_at,
-           t."createdAt" <= c.as_of - p.payment_overdue_hours * interval '1 hour' AS mature,
+           t."createdAt" <= c.as_of - p.payment_overdue_hours * interval '1 hour'
+               AND (t.status <> 'performed' OR t."performedAt" <= c.as_of) AS mature,
+           t."performedAt" AS performed_at,
            c.as_of,
            p.payment_overdue_hours, p.payment_lookback_days
     FROM public.transactions t
@@ -301,7 +303,7 @@ tx_candidates AS (
     CROSS JOIN p
     WHERE t.type = 'prolong'
       AND s.status IN ('active', 'suspended', 'prolong_wait')
-      AND t."createdAt" <= c.as_of
+      AND t."createdAt" <= c.as_of + p.max_age_hours * interval '1 hour'
       AND t."createdAt" > c.as_of - p.payment_lookback_days * interval '1 day'
 ),
 tx AS (
@@ -311,7 +313,8 @@ tx AS (
            min((SELECT min(boundary)
                 FROM unnest(ARRAY[
                     created_at + payment_overdue_hours * interval '1 hour',
-                    created_at + payment_lookback_days * interval '1 day'
+                    created_at + payment_lookback_days * interval '1 day',
+                    performed_at
                 ]) AS boundary WHERE boundary > as_of)) AS next_boundary
     FROM tx_candidates
     GROUP BY account_id
@@ -422,7 +425,7 @@ scored AS (
                 'overdueHours', p.payment_overdue_hours,
                 'lookbackDays', p.payment_lookback_days))
         ) AS v(key, f, params)
-        JOIN w ON w.key = v.key
+        RIGHT JOIN w ON w.key = v.key
     ) r
 ),
 final AS (
@@ -483,6 +486,16 @@ FROM assessed f
 CROSS JOIN clock c
 CROSS JOIN p;
 
+CREATE OR REPLACE FUNCTION public.risk_projection_stale(
+    p_account_id bigint, p_model_version bigint, p_valid_until timestamptz
+) RETURNS boolean LANGUAGE sql STABLE
+AS $$
+    SELECT p_model_version IS NULL
+        OR p_model_version IS DISTINCT FROM (SELECT max(version) FROM public.model_revisions)
+        OR (p_valid_until IS NOT NULL AND p_valid_until <= public.model_now())
+        OR EXISTS (SELECT 1 FROM public.delta d WHERE d.account_id=p_account_id AND d.proc_date IS NULL)
+$$;
+
 CREATE VIEW public.customer_scores_vw AS
 SELECT
     a.id,
@@ -508,28 +521,38 @@ SELECT
     s.anomalies,
     s.calculated_at,
     s.as_of,
-    s.model_version
+    s.model_version,
+    public.risk_projection_stale(a.id, s.model_version, s.valid_until) AS is_stale
 FROM public.accounts a
 LEFT JOIN public.scores s ON s.account_id = a.id AND s.is_current;
 
 CREATE VIEW public.churn_history_vw AS
 SELECT
+    h.service_id,
+    h.account_id,
+    s.price,
+    s."paymentTerm" AS payment_term,
+    h.changed_at AS deleted_at,
+    false AS estimated
+FROM public.service_status_history h
+LEFT JOIN public.services s ON s.id=h.service_id
+WHERE h.to_status='deleted' AND h.from_status IS NOT NULL AND h.changed_at <= public.model_now()
+UNION ALL
+SELECT
     s.id AS service_id,
     s."ownerId" AS account_id,
     s.price,
     s."paymentTerm" AS payment_term,
-    coalesce(h.changed_at, s."expiresAt" + p.grace_days * interval '1 day') AS deleted_at,
-    h.changed_at IS NULL AS estimated
+    s."expiresAt" + p.grace_days * interval '1 day' AS deleted_at,
+    true AS estimated
 FROM public.services s
 CROSS JOIN (SELECT value AS grace_days FROM public.model_settings WHERE key = 'grace_days') p
-LEFT JOIN LATERAL (
-    SELECT x.changed_at
-    FROM public.service_status_history x
-    WHERE x.service_id = s.id AND x.to_status = 'deleted' AND x.from_status IS NOT NULL
-    ORDER BY x.id DESC
-    LIMIT 1
-) h ON true
-WHERE s.status = 'deleted';
+WHERE s.status = 'deleted'
+  AND s."expiresAt" + p.grace_days * interval '1 day' <= public.model_now()
+  AND NOT EXISTS (
+      SELECT 1 FROM public.service_status_history h
+      WHERE h.service_id=s.id AND h.to_status='deleted' AND h.from_status IS NOT NULL
+  );
 
 CREATE VIEW public.churn_forecast_vw AS
 WITH
@@ -555,6 +578,8 @@ x AS (
             THEN coalesce((sc.features ->> 'insufficient_funds')::numeric, 0)
             ELSE 1
         END AS risk_weight,
+        sc.as_of AS calculated_as_of,
+        sc.model_version,
         c.as_of,
         p.horizon_days
     FROM public.services s
@@ -562,8 +587,10 @@ x AS (
     CROSS JOIN c
     CROSS JOIN p
     WHERE s.status IN ('active', 'suspended', 'prolong_wait')
+      AND NOT public.risk_projection_stale(sc.account_id, sc.model_version, sc.valid_until)
 )
-SELECT service_id, account_id, price, payment_term, expected_at, round(risk_weight, 4) AS risk_weight
+SELECT service_id, account_id, price, payment_term, expected_at, round(risk_weight, 4) AS risk_weight,
+       calculated_as_of, model_version
 FROM x
 WHERE expected_at < as_of + horizon_days * interval '1 day'
   AND risk_weight > 0;
@@ -581,7 +608,8 @@ SELECT
     (SELECT value FROM public.model_settings WHERE key = 'horizon_days') AS horizon_days,
     'оценка выручки под риском'::text AS money_title,
     'взвешенная по эвристическому score часть тарифной выручки за горизонт, не покрытая доступными средствами для автопродления; не прогноз фактических убытков'::text AS money_description,
-    'risk-score от 0 до 100 — приоритет внимания, а не вероятность ухода; веса относительные'::text AS score_description;
+    'risk-score от 0 до 100 — приоритет внимания, а не вероятность ухода; веса относительные'::text AS score_description,
+    (SELECT max(version) FROM public.model_revisions) AS model_version;
 
 CREATE OR REPLACE FUNCTION public.set_risk_settings(p_values jsonb, p_actor text)
     RETURNS bigint LANGUAGE plpgsql
@@ -649,6 +677,11 @@ BEGIN
     IF NOT pg_try_advisory_xact_lock(hashtext('churn.recalc')) THEN
         RETURN QUERY SELECT NULL::bigint, 'busy'::text, 0, v_version, v_as_of;
         RETURN;
+    END IF;
+    IF v_version IS NULL OR NOT EXISTS (
+        SELECT 1 FROM public.model_features f JOIN public.model_settings s ON s.key=f.weight_key WHERE s.value>0
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'risk model requires a revision and positive registered feature weights';
     END IF;
     INSERT INTO public.delta (account_id, reason)
     SELECT s.account_id, 'time' FROM public.scores s
