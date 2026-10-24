@@ -10,6 +10,7 @@ import {
 
 import { ru } from '@/shared/i18n/ru';
 import { cn } from '@/shared/lib/cn';
+import { plural } from '@/shared/lib/plural';
 import { formatDate, formatDateTime, formatMoney } from '@/shared/lib/format';
 import { DataTable } from '@/shared/ui/data-table';
 import { StatusTag } from '@/shared/ui/status-tag';
@@ -67,6 +68,17 @@ export function CustomerServices({
   graceDays,
 }: CustomerServicesProps) {
   const live = services.filter((service) => service.isLive).length;
+  const blocked = services.filter((service) => service.status === 'blocked').length;
+  const deleted = services.filter((service) => service.status === 'deleted').length;
+  const aside =
+    live > 0
+      ? text.greyNote
+      : [
+          blocked > 0 ? text.blocked(blocked, plural(blocked, text.blockedForms)) : null,
+          deleted > 0 ? text.deleted(deleted, plural(deleted, text.deletedForms)) : null,
+        ]
+          .filter((part) => part !== null)
+          .join(' · ');
   const showDeadline = services.some((service) => service.status === 'prolong_wait');
   const dim = (service: CustomerService) => !service.isLive && 'text-ink-muted';
 
@@ -78,7 +90,8 @@ export function CustomerServices({
         </h2>
         {services.length > 0 && (
           <span className="text-caption text-ink-muted">
-            {text.live(live)} · {text.greyNote}
+            {text.live(live)}
+            {aside && ` · ${aside}`}
           </span>
         )}
       </div>

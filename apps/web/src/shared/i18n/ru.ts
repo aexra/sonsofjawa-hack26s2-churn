@@ -230,7 +230,11 @@ export const ru = {
       title: 'услуги',
       caption: (id: number) => `услуги клиента ${String(id)}`,
       live: (count: number) => (count > 0 ? `${String(count)} действующих` : 'действующих нет'),
-      greyNote: 'недействующие показываются серым',
+      greyNote: 'удалённые и заблокированные показываются серым',
+      blocked: (count: number, word: string) => `${String(count)} ${word}`,
+      blockedForms: { one: 'заблокирована', few: 'заблокированы', many: 'заблокировано' },
+      deleted: (count: number, word: string) => `${String(count)} ${word}`,
+      deletedForms: { one: 'удалена', few: 'удалены', many: 'удалено' },
       empty: 'у клиента нет услуг',
       columns: {
         name: 'услуга',
