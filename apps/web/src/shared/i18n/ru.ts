@@ -61,6 +61,7 @@ export const ru = {
     submit: 'войти',
     submitting: 'вход…',
     footnote: 'доступ выдаёт администратор панели',
+    tagline: 'кто под риском, почему и сколько денег — на горизонте 30 дн.',
     localDisabled: 'вход по паролю отключён',
     or: 'или',
     ssoName: 'SSO',

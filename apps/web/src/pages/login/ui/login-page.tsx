@@ -1,4 +1,4 @@
-import { CircleAlert, Info, ShieldCheck, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { CircleAlert, Info, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 
@@ -9,6 +9,8 @@ import { safeNextPath } from '@/shared/lib/redirect';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
+
+import { BrandPanel } from './brand-panel';
 
 const SSO_ERRORS: Record<string, { icon: LucideIcon; text: string }> = {
   forbidden: { icon: TriangleAlert, text: ru.login.errors.forbidden },
@@ -62,19 +64,14 @@ export function LoginPage() {
   const ssoLabel = sso?.name ?? ru.login.ssoName;
 
   return (
-    <div className="box-border flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
-      <div className="flex w-full max-w-100 flex-col gap-6">
-        <div className="flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="inline-flex size-9 items-center justify-center rounded-sm bg-accent text-on-accent"
-          >
-            <ShieldCheck className="size-4" />
-          </span>
-          <span className="font-display text-[20px] leading-7 font-semibold">{ru.app.title}</span>
-        </div>
-        <div className="flex flex-col gap-4 rounded-md border border-line bg-surface p-6">
-          <h1 className="m-0 font-display text-title">{ru.login.title}</h1>
+    <div className="box-border flex min-h-screen flex-col bg-canvas md:flex-row">
+      <BrandPanel />
+      <div className="flex flex-1 items-center justify-center px-4 py-10">
+        <div className="flex w-full max-w-100 flex-col gap-5">
+          <div className="flex flex-col gap-1.5">
+            <h1 className="m-0 font-display text-title text-[34px] leading-10">{ru.login.title}</h1>
+            <p className="m-0 text-ink-muted">{ru.login.footnote}</p>
+          </div>
           {expired && (
             <Notice tone="info" icon={Info}>
               {ru.login.sessionExpired}
@@ -87,9 +84,9 @@ export function LoginPage() {
           )}
           {providers.isPending && (
             <div className="flex flex-col gap-4">
-              <Skeleton className="h-control-md" />
-              <Skeleton className="h-control-md" />
-              <Skeleton className="h-control-md" />
+              <Skeleton className="h-11" />
+              <Skeleton className="h-11" />
+              <Skeleton className="h-11" />
             </div>
           )}
           {forbidden && sso && (
@@ -123,7 +120,6 @@ export function LoginPage() {
             />
           )}
         </div>
-        <p className="m-0 text-center text-caption text-ink-muted">{ru.login.footnote}</p>
       </div>
     </div>
   );

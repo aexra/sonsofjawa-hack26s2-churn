@@ -18,7 +18,7 @@ export function SsoButton({ loginUrl, displayName, next, primary }: SsoButtonPro
       onClick={() => {
         if (next !== null) rememberNextTarget(next);
       }}
-      className={cn(buttonVariants({ variant: primary ? 'primary' : 'secondary' }), 'w-full')}
+      className={cn(buttonVariants({ variant: primary ? 'primary' : 'secondary' }), 'h-11 w-full')}
     >
       {ru.login.ssoSubmit(displayName ?? ru.login.ssoName)}
     </a>

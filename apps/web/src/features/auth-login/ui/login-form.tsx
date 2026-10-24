@@ -35,6 +35,7 @@ export function LoginForm() {
       <Field label={ru.login.login} id="login" error={errors.login?.message}>
         <Input
           id="login"
+          className="h-11"
           autoComplete="username"
           invalid={Boolean(errors.login) || Boolean(error)}
           disabled={isPending}
@@ -45,6 +46,7 @@ export function LoginForm() {
       <Field label={ru.login.password} id="password" error={errors.password?.message}>
         <Input
           id="password"
+          className="h-11"
           type="password"
           autoComplete="current-password"
           invalid={Boolean(errors.password) || Boolean(error)}
@@ -62,7 +64,7 @@ export function LoginForm() {
           <span>{errorMessage(error)}</span>
         </div>
       )}
-      <Button type="submit" variant="primary" loading={isPending} className="w-full">
+      <Button type="submit" variant="primary" loading={isPending} className="h-11 w-full">
         {isPending ? ru.login.submitting : ru.login.submit}
       </Button>
     </form>
