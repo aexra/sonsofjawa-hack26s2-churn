@@ -16,6 +16,68 @@ AS $$
            END
 $$;
 
+CREATE OR REPLACE FUNCTION public.risk_normalized_score(p_values numeric[], p_weights numeric[])
+    RETURNS numeric LANGUAGE plpgsql IMMUTABLE STRICT
+AS $$
+DECLARE
+    v_total numeric;
+    v_weighted numeric;
+BEGIN
+    IF cardinality(p_values) = 0 OR cardinality(p_values) <> cardinality(p_weights)
+       OR array_ndims(p_values) <> 1 OR array_ndims(p_weights) <> 1 THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'feature and weight arrays must be nonempty and aligned';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM unnest(p_values, p_weights) AS x(value, weight)
+        WHERE value IS NULL OR weight IS NULL OR value < 0 OR value > 1 OR weight < 0
+           OR value::text IN ('NaN', 'Infinity', '-Infinity')
+           OR weight::text IN ('NaN', 'Infinity', '-Infinity')
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'features must be finite values in 0..1 and weights finite nonnegative values';
+    END IF;
+    SELECT sum(weight), sum(value * weight)
+    INTO v_total, v_weighted FROM unnest(p_values, p_weights) AS x(value, weight);
+    IF v_total <= 0 THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'sum of model weights must be positive';
+    END IF;
+    RETURN round(100 * v_weighted / v_total, 2);
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.risk_level(p_score numeric, p_medium numeric, p_high numeric)
+    RETURNS text LANGUAGE plpgsql IMMUTABLE STRICT
+AS $$
+BEGIN
+    IF p_score < 0 OR p_score > 100 OR p_medium < 0 OR p_medium >= p_high OR p_high > 100
+       OR p_score::text IN ('NaN', 'Infinity', '-Infinity')
+       OR p_medium::text IN ('NaN', 'Infinity', '-Infinity')
+       OR p_high::text IN ('NaN', 'Infinity', '-Infinity') THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'score and ordered risk thresholds must be finite values in 0..100';
+    END IF;
+    RETURN CASE WHEN p_score >= p_high THEN 'high'
+                WHEN p_score >= p_medium THEN 'medium' ELSE 'low' END;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.risk_money_estimate(
+    p_revenue numeric, p_automatic_revenue numeric, p_funds numeric, p_score numeric
+) RETURNS TABLE (revenue_horizon bigint, secured_amount bigint, expected_loss bigint)
+    LANGUAGE plpgsql IMMUTABLE STRICT
+AS $$
+BEGIN
+    IF p_revenue < 0 OR p_automatic_revenue < 0 OR p_funds < 0
+       OR p_automatic_revenue > p_revenue OR p_score < 0 OR p_score > 100
+       OR EXISTS (SELECT 1 FROM unnest(ARRAY[p_revenue, p_automatic_revenue, p_funds, p_score]) AS n
+                  WHERE n::text IN ('NaN', 'Infinity', '-Infinity')) THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'money inputs must be finite and nonnegative with automatic revenue bounded by revenue';
+    END IF;
+    revenue_horizon := round(p_revenue)::bigint;
+    secured_amount := round(least(p_automatic_revenue, p_funds))::bigint;
+    expected_loss := round(p_score / 100 * (revenue_horizon - secured_amount))::bigint;
+    RETURN NEXT;
+END
+$$;
+
 CREATE TEMPORARY TABLE model_settings_declared (
     key text, group_key text, default_value numeric, min_value numeric, max_value numeric,
     unit text, title text, description text, sort_order integer
@@ -306,7 +368,7 @@ scored AS (
         feat.*,
         r.reasons,
         r.features,
-        CASE WHEN wt.total > 0 THEN round(r.weighted / wt.total * 100, 2) ELSE 0 END AS score
+        public.risk_normalized_score(r.feature_values, r.feature_weights) AS score
     FROM feat
     CROSS JOIN w_total wt
     CROSS JOIN p
@@ -326,7 +388,8 @@ scored AS (
                 '[]'::jsonb
             ) AS reasons,
             coalesce(jsonb_object_agg(v.key, round(v.f, 4)), '{}'::jsonb) AS features,
-            coalesce(sum(w.weight * v.f), 0) AS weighted
+            array_agg(v.f ORDER BY v.key) AS feature_values,
+            array_agg(w.weight ORDER BY v.key) AS feature_weights
         FROM (VALUES
             ('renewal_unsecured', feat.f_renewal_unsecured, jsonb_build_object(
                 'serviceId', feat.top_service_id,
@@ -375,9 +438,13 @@ final AS (
             WHEN NOT s.account_exists THEN NULL
             WHEN s.services_total = 0 THEN 'no_services'
             WHEN s.services_live = 0 THEN 'no_live_services'
-        END AS no_score_reason,
-        least(s.revenue_auto, s.funds) AS secured
+        END AS no_score_reason
     FROM scored s
+),
+assessed AS (
+    SELECT f.*, m.revenue_horizon, m.secured_amount, m.expected_loss
+    FROM final f
+    CROSS JOIN LATERAL public.risk_money_estimate(f.revenue_h, f.revenue_auto, f.funds, f.score) m
 )
 SELECT
     f.account_id,
@@ -387,15 +454,10 @@ SELECT
     f.status,
     f.no_score_reason,
     CASE WHEN f.status = 'scored' THEN f.score END AS risk_score,
-    CASE WHEN f.status <> 'scored' THEN NULL
-         WHEN f.score >= p.level_high THEN 'high'
-         WHEN f.score >= p.level_medium THEN 'medium'
-         ELSE 'low'
-    END AS risk_level,
-    CASE WHEN f.status = 'scored' THEN round(f.revenue_h)::bigint END AS revenue_horizon,
-    CASE WHEN f.status = 'scored' THEN round(f.secured)::bigint END AS secured_amount,
-    CASE WHEN f.status = 'scored'
-         THEN round(f.score / 100 * greatest(f.revenue_h - f.secured, 0))::bigint END AS expected_loss,
+    CASE WHEN f.status = 'scored' THEN public.risk_level(f.score, p.level_medium, p.level_high) END AS risk_level,
+    CASE WHEN f.status = 'scored' THEN f.revenue_horizon END AS revenue_horizon,
+    CASE WHEN f.status = 'scored' THEN f.secured_amount END AS secured_amount,
+    CASE WHEN f.status = 'scored' THEN f.expected_loss END AS expected_loss,
     f.services_total::integer AS services_total,
     f.services_live::integer AS services_live,
     CASE WHEN f.status = 'scored' THEN (
@@ -417,7 +479,7 @@ SELECT
     CASE WHEN f.status = 'scored'
          THEN least(f.next_boundary, c.as_of + p.max_age_hours * interval '1 hour') END AS valid_until,
     true AS is_current
-FROM final f
+FROM assessed f
 CROSS JOIN clock c
 CROSS JOIN p;
 
