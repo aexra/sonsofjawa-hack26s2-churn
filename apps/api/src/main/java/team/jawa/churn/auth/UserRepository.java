@@ -73,7 +73,8 @@ public class UserRepository {
     }
 
     public void updateOidc(long id, String role, String displayName, String email) {
-        jdbc.sql("UPDATE public.users SET role = :role, display_name = :displayName, email = :email WHERE id = :id")
+        jdbc.sql("UPDATE public.users SET role = :role, display_name = COALESCE(:displayName, display_name),"
+                        + " email = COALESCE(:email, email) WHERE id = :id")
                 .param("id", id)
                 .param("role", role)
                 .param("displayName", displayName, Types.VARCHAR)

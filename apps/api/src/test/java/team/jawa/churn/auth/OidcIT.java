@@ -258,6 +258,38 @@ class OidcIT extends IntegrationTest {
     }
 
     @Test
+    void anExpiredRequestCookieIsRejected() throws Exception {
+        Browser browser = new Browser();
+        String authorize = browser.location(browser.get("/api/v1/auth/oidc/login"));
+        String providerUrl = browser.location(browser.get(authorize));
+        String callback = browser.location(browser.get(providerUrl));
+        String[] parts = browser.cookie(OidcLoginCookies.REQUEST).orElseThrow().split("\\.");
+        parts[0] = Long.toString(java.time.Instant.now().getEpochSecond() - 3600);
+        browser.cookies.getCookieStore().removeAll();
+        HttpCookie stale = new HttpCookie(OidcLoginCookies.REQUEST, String.join(".", parts));
+        stale.setPath("/api/v1/auth/oidc");
+        browser.cookies.getCookieStore().add(URI.create("http://localhost:" + port), stale);
+
+        HttpResponse<String> response = browser.get(callback);
+
+        assertThat(browser.location(response)).isEqualTo(PUBLIC_URL + "/login?error=provider");
+        assertThat(browser.cookie("churn_at")).isEmpty();
+    }
+
+    @Test
+    void aLaterLoginKeepsTheNameAndEmailWhenTheProviderOmitsThem() throws Exception {
+        String subject = UUID.randomUUID().toString();
+        new Browser().signIn(subject, claims("keeper", List.of("user")));
+
+        new Browser().signIn(subject, Map.of("preferred_username", "keeper", "roles", List.of("user")));
+
+        assertThat(jdbc.queryForObject("select email from users where oidc_subject = ?", String.class, subject))
+                .isEqualTo("keeper@example.test");
+        assertThat(jdbc.queryForObject("select display_name from users where oidc_subject = ?", String.class, subject))
+                .isEqualTo("name of keeper");
+    }
+
+    @Test
     void providersEndpointAdvertisesSso() throws Exception {
         HttpResponse<String> response = client().get("/api/v1/auth/providers");
 

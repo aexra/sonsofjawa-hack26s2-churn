@@ -34,8 +34,10 @@ public class OidcConfig {
     @EventListener(ApplicationReadyEvent.class)
     void checkProvider(ApplicationReadyEvent event) {
         OidcClientRegistrations registrations = event.getApplicationContext().getBean(OidcClientRegistrations.class);
-        if (registrations.available().isPresent()) {
-            log.info("OIDC provider is reachable");
-        }
+        Thread.startVirtualThread(() -> {
+            if (registrations.available().isPresent()) {
+                log.info("OIDC provider is reachable");
+            }
+        });
     }
 }

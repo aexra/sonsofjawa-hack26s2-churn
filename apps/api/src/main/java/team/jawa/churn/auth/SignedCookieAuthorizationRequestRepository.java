@@ -8,9 +8,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
@@ -25,6 +27,7 @@ public class SignedCookieAuthorizationRequestRepository
     static final String COOKIE = "churn_oidc";
 
     private static final String PATH = "/api/v1/auth/oidc";
+    private static final String DOMAIN = "churn.oidc.authorization-request:";
     private static final Duration LIFETIME = Duration.ofMinutes(5);
 
     private final SecretKey key;
@@ -88,26 +91,30 @@ public class SignedCookieAuthorizationRequestRepository
                 ObjectOutputStream out = new ObjectOutputStream(bytes)) {
             out.writeObject(authorizationRequest);
             out.flush();
-            byte[] payload = bytes.toByteArray();
             Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
-            return encoder.encodeToString(payload) + "." + encoder.encodeToString(sign(payload));
+            String payload = encoder.encodeToString(bytes.toByteArray());
+            String issuedAt = Long.toString(Instant.now().getEpochSecond());
+            return issuedAt + "." + payload + "." + encoder.encodeToString(sign(issuedAt, payload));
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
     }
 
     private OAuth2AuthorizationRequest decode(String value) {
-        int separator = value.indexOf('.');
-        if (separator < 0) {
+        String[] parts = value.split("\\.");
+        if (parts.length != 3) {
             return null;
         }
         try {
-            Base64.Decoder decoder = Base64.getUrlDecoder();
-            byte[] payload = decoder.decode(value.substring(0, separator));
-            byte[] signature = decoder.decode(value.substring(separator + 1));
-            if (!MessageDigest.isEqual(signature, sign(payload))) {
+            byte[] signature = Base64.getUrlDecoder().decode(parts[2]);
+            if (!MessageDigest.isEqual(signature, sign(parts[0], parts[1]))) {
                 return null;
             }
+            long age = Instant.now().getEpochSecond() - Long.parseLong(parts[0]);
+            if (age < 0 || age > LIFETIME.toSeconds()) {
+                return null;
+            }
+            byte[] payload = Base64.getUrlDecoder().decode(parts[1]);
             try (ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(payload))) {
                 return (OAuth2AuthorizationRequest) in.readObject();
             }
@@ -116,11 +123,14 @@ public class SignedCookieAuthorizationRequestRepository
         }
     }
 
-    private byte[] sign(byte[] payload) {
+    private byte[] sign(String issuedAt, String payload) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(key);
-            return mac.doFinal(payload);
+            mac.update(DOMAIN.getBytes(StandardCharsets.UTF_8));
+            mac.update(issuedAt.getBytes(StandardCharsets.UTF_8));
+            mac.update((byte) '.');
+            return mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException(e);
         }

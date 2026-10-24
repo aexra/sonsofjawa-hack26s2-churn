@@ -2,6 +2,7 @@ package team.jawa.churn.auth;
 
 import java.util.Locale;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,8 +40,12 @@ public class OidcUserProvisioner {
             users.updateOidc(user.id(), role.get(), displayName, email);
             return users.findById(user.id());
         }
-        long id = users.insertOidc(freeLogin(principal), displayName, email, role.get(), subject);
-        return users.findById(id);
+        try {
+            long id = users.insertOidc(freeLogin(principal), displayName, email, role.get(), subject);
+            return users.findById(id);
+        } catch (DuplicateKeyException e) {
+            return users.findByOidcSubject(subject).filter(UserAccount::enabled);
+        }
     }
 
     private String freeLogin(OidcUser principal) {
