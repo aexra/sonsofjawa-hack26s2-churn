@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react';
+import { ArrowDown, ArrowUp, Columns3, GripVertical } from 'lucide-react';
 import { useRef } from 'react';
 
 import { CUSTOMER_FIELDS, type CustomerField } from '@/entities/customer';
@@ -30,6 +30,7 @@ export function CustomersColumns({ fields, onChange, onReset }: CustomersColumns
     <Popover>
       <PopoverTrigger asChild>
         <Button size="sm" aria-haspopup="dialog">
+          <Columns3 aria-hidden="true" className="size-4" />
           {ru.customers.columnsButton}
         </Button>
       </PopoverTrigger>

@@ -31,7 +31,7 @@ function TruncatedText({ text }: { text: string }) {
 }
 
 function TopReason({ row }: { row: CustomerRow }) {
-  if (row.topReason) return <ReasonText reason={row.topReason} />;
+  if (row.topReason) return <ReasonText reason={row.topReason} multiline />;
   if (row.noScoreReason) {
     return <span className="text-ink-muted">{ru.customers.noScoreReason[row.noScoreReason]}</span>;
   }

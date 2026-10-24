@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 
 import {
   EMPTY_FILTER,
@@ -24,11 +24,10 @@ const parseScore = (raw: string): number | null => {
 
 const scoreText = (value: number | null) => (value === null ? '' : String(value));
 
-export function CustomersFilter() {
+export function CustomersFilter({ children }: { children: ReactNode }) {
   const [params, update] = useCustomersListParams();
   const searchId = useId();
-  const minId = useId();
-  const maxId = useId();
+  const levelId = useId();
   const [q, setQ] = useDebouncedField(params.q, (value) => {
     update({ q: value.trim() });
   });
@@ -48,81 +47,101 @@ export function CustomersFilter() {
   };
 
   return (
-    <>
-      <div className="w-full max-w-90 min-w-65 flex-1">
-        <Field label={ru.customers.search} id={searchId}>
-          <Input
-            id={searchId}
-            type="search"
-            value={q}
-            placeholder={ru.customers.searchPlaceholder}
-            onChange={(event) => {
-              setQ(event.target.value);
-            }}
-          />
-        </Field>
+    <section
+      aria-label={ru.customers.filters}
+      className="flex flex-col gap-3.5 rounded-md border border-line bg-surface p-4"
+    >
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+        <div className="min-w-65 flex-[1_1_280px]">
+          <Field label={ru.customers.search} id={searchId}>
+            <Input
+              id={searchId}
+              type="search"
+              adornment="search"
+              value={q}
+              placeholder={ru.customers.searchPlaceholder}
+              onChange={(event) => {
+                setQ(event.target.value);
+              }}
+            />
+          </Field>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span id={levelId} className="text-label text-ink-muted">
+            {ru.customers.levelGroup}
+          </span>
+          <div role="group" aria-labelledby={levelId} className="flex flex-wrap gap-1.5">
+            {LEVELS.map((level) => (
+              <FilterChip
+                key={level}
+                tone={level}
+                pressed={params.level.includes(level)}
+                onPressedChange={(pressed) => {
+                  toggleLevel(level, pressed);
+                }}
+              >
+                {ru.risk[level]}
+              </FilterChip>
+            ))}
+            <FilterChip
+              tone="none"
+              pressed={noScore}
+              onPressedChange={(pressed) => {
+                update({ level: [], status: pressed ? ['no_score'] : [] });
+              }}
+            >
+              {ru.risk.none}
+            </FilterChip>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-label text-ink-muted">{ru.customers.score}</span>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              mono
+              min={0}
+              max={100}
+              inputMode="decimal"
+              className="w-19"
+              aria-label={ru.customers.scoreFrom}
+              placeholder={ru.customers.scoreFromPlaceholder}
+              value={min}
+              onChange={(event) => {
+                setMin(event.target.value);
+              }}
+            />
+            <span aria-hidden="true" className="text-ink-faint">
+              {ru.common.emptyValue}
+            </span>
+            <Input
+              type="number"
+              mono
+              min={0}
+              max={100}
+              inputMode="decimal"
+              className="w-19"
+              aria-label={ru.customers.scoreTo}
+              placeholder={ru.customers.scoreToPlaceholder}
+              value={max}
+              onChange={(event) => {
+                setMax(event.target.value);
+              }}
+            />
+          </div>
+        </div>
       </div>
-      <div role="group" aria-label={ru.customers.levelGroup} className="flex flex-wrap gap-2">
-        {LEVELS.map((level) => (
-          <FilterChip
-            key={level}
-            pressed={params.level.includes(level)}
-            onPressedChange={(pressed) => {
-              toggleLevel(level, pressed);
-            }}
-          >
-            {ru.risk[level]}
-          </FilterChip>
-        ))}
-        <FilterChip
-          pressed={noScore}
-          onPressedChange={(pressed) => {
-            update({ level: [], status: pressed ? ['no_score'] : [] });
+      <div className="flex flex-wrap items-center gap-2.5 border-t border-line pt-3">
+        <Switch
+          label={ru.customers.anomalies}
+          checked={params.hasAnomalies}
+          onCheckedChange={(checked) => {
+            update({ hasAnomalies: checked });
           }}
-        >
-          {ru.risk.none}
-        </FilterChip>
+        />
+        <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
       </div>
-      <Switch
-        label={ru.customers.anomalies}
-        checked={params.hasAnomalies}
-        onCheckedChange={(checked) => {
-          update({ hasAnomalies: checked });
-        }}
-      />
-      <div className="flex items-end gap-2">
-        <Field label={ru.customers.scoreFrom} id={minId}>
-          <Input
-            id={minId}
-            type="number"
-            mono
-            min={0}
-            max={100}
-            inputMode="decimal"
-            className="w-16"
-            value={min}
-            onChange={(event) => {
-              setMin(event.target.value);
-            }}
-          />
-        </Field>
-        <Field label={ru.customers.scoreTo} id={maxId}>
-          <Input
-            id={maxId}
-            type="number"
-            mono
-            min={0}
-            max={100}
-            inputMode="decimal"
-            className="w-16"
-            value={max}
-            onChange={(event) => {
-              setMax(event.target.value);
-            }}
-          />
-        </Field>
-      </div>
-    </>
+    </section>
   );
 }
 

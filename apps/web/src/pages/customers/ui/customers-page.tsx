@@ -1,3 +1,4 @@
+import { Info } from 'lucide-react';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 
@@ -19,19 +20,17 @@ export function CustomersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
-        <CustomersFilter />
-        <div className="ml-auto flex gap-2">
-          <CustomersFilterReset />
-          <CustomersColumns fields={columns.fields} onChange={columns.change} onReset={reset} />
-          <ExportCsv params={params} fields={columns.fields} />
-        </div>
-      </div>
+      <CustomersFilter>
+        <CustomersFilterReset />
+        <CustomersColumns fields={columns.fields} onChange={columns.change} onReset={reset} />
+        <ExportCsv params={params} fields={columns.fields} />
+      </CustomersFilter>
       <CustomersTable fields={columns.fields} onInvalidFields={resetColumns} />
-      <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-md border border-line bg-surface px-4 py-3 text-caption text-ink-muted">
+      <p className="m-0 flex flex-wrap items-start gap-x-6 gap-y-2 rounded-sm bg-surface-sunken px-4 py-3 text-caption text-ink-muted">
+        <Info aria-hidden="true" className="mt-px size-4 flex-none" />
         <span>{ru.customers.helpSort}</span>
         <span>{ru.customers.helpColumns}</span>
-      </div>
+      </p>
     </div>
   );
 }

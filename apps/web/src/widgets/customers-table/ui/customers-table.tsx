@@ -141,6 +141,7 @@ export function CustomersTable({ fields, onInvalidFields }: CustomersTableProps)
           sortable: isSortableField(field),
           align: isRightAligned(field) ? 'right' : 'left',
           mono: isMono(field),
+          clamp: field === 'topReason',
           render: (row: CustomerRow) =>
             index === 0 ? (
               <Link
@@ -156,7 +157,7 @@ export function CustomersTable({ fields, onInvalidFields }: CustomersTableProps)
             ),
         }))}
       />
-      <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-ink-muted">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-data text-ink-muted">
         <span>
           {ru.customers.showing}{' '}
           <b className="font-medium text-ink">
@@ -165,7 +166,7 @@ export function CustomersTable({ fields, onInvalidFields }: CustomersTableProps)
           {ru.customers.of} <b className="font-medium text-ink">{page.totalItems}</b> ·{' '}
           {ru.customers.sortBy}: {sortLabel}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="customers-page-size">{ru.customers.pageSize}</label>
           <Select
             id="customers-page-size"

@@ -1,3 +1,5 @@
+import { Download } from 'lucide-react';
+
 import { customersSearch, type CustomerField, type ListParams } from '@/entities/customer';
 import { runtimeConfig } from '@/shared/config/runtime';
 import { ru } from '@/shared/i18n/ru';
@@ -12,6 +14,7 @@ export function ExportCsv({ params, fields }: ExportCsvProps) {
   const href = `${runtimeConfig.apiBaseUrl}/customers/export?${customersSearch(params, fields, false).toString()}`;
   return (
     <a href={href} download className={buttonVariants({ size: 'sm' })}>
+      <Download aria-hidden="true" className="size-4" />
       {ru.customers.exportCsv}
     </a>
   );
