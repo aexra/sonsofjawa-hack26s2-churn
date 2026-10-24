@@ -5,24 +5,6 @@ networks:
     external: true
 
 services:
-  pg:
-    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/library/postgres:18-alpine
-    container_name: churn-pg
-    restart: unless-stopped
-    networks:
-      - nginx
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-churn}
-      POSTGRES_USER: ${POSTGRES_USER:-churn}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 3s
-      timeout: 3s
-      retries: 20
-
   api:
     image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/api:dev
     container_name: churn-api
@@ -31,9 +13,6 @@ services:
       - nginx
     env_file:
       - .env
-    depends_on:
-      pg:
-        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -64,6 +43,3 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
-volumes:
-  pgdata:
