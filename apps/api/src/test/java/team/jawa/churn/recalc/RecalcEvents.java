@@ -9,12 +9,12 @@ import javax.sql.DataSource;
 import org.postgresql.PGConnection;
 import org.postgresql.PGNotification;
 
-final class RecalcEvents implements AutoCloseable {
+public final class RecalcEvents implements AutoCloseable {
 
     private final Connection connection;
     private final List<String> received = new ArrayList<>();
 
-    RecalcEvents(DataSource dataSource) throws SQLException {
+    public RecalcEvents(DataSource dataSource) throws SQLException {
         connection = dataSource.getConnection();
         try (Statement statement = connection.createStatement()) {
             statement.execute("UNLISTEN *");
@@ -23,7 +23,7 @@ final class RecalcEvents implements AutoCloseable {
         }
     }
 
-    List<String> collect(long quietMillis) throws SQLException {
+    public List<String> collect(long quietMillis) throws SQLException {
         PGConnection pg = connection.unwrap(PGConnection.class);
         PGNotification[] batch;
         while ((batch = pg.getNotifications((int) quietMillis)) != null && batch.length > 0) {

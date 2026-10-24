@@ -1,5 +1,6 @@
 package team.jawa.churn.web;
 
+import jakarta.validation.ConstraintViolationException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,7 +28,24 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail body = ProblemDetail.forStatusAndDetail(ex.status(), ex.getMessage());
         ResponseEntity<Object> response = handleExceptionInternal(ex, body, new HttpHeaders(), ex.status(), request);
         body.setProperty("code", ex.code());
+        if (!ex.errors().isEmpty()) {
+            body.setProperty("errors", ex.errors());
+        }
         return response;
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    ResponseEntity<Object> handleConstraintViolation(ConstraintViolationException ex, WebRequest request) {
+        ProblemDetail body = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "invalid request parameters");
+        body.setProperty(
+                "errors",
+                ex.getConstraintViolations().stream()
+                        .map(violation -> Map.of(
+                                "code", "invalid_value",
+                                "field", fieldOf(violation.getPropertyPath().toString()),
+                                "message", String.valueOf(violation.getMessage())))
+                        .toList());
+        return handleExceptionInternal(ex, body, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -73,6 +91,11 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             problem.setProperty("requestId", MDC.get(RequestIdFilter.MDC_KEY));
         }
         return response;
+    }
+
+    private static String fieldOf(String path) {
+        int dot = path.lastIndexOf('.');
+        return dot < 0 ? path : path.substring(dot + 1);
     }
 
     private static String codeOf(HttpStatusCode status) {
