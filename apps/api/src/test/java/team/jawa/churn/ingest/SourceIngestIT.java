@@ -30,7 +30,10 @@ class SourceIngestIT extends IntegrationTest {
     private static final String APPLICATION_JSON = "application/json";
     private static final String SERVICE_26_CSV =
             "id,name,ownerId,paymentTerm,autoProlong,createdAt,expiresAt,status,price\n"
-                    + "26,service-0026,6,week,false,2026-10-19T14:30:00.000Z,2026-10-26T14:30:00.000Z,prolong_wait,547\n";
+                + "26,service-0026,6,week,false,2026-10-19T14:30:00.000Z,2026-10-26T14:30:00.000Z,prolong_wait,547\n";
+
+    @Autowired
+    io.micrometer.core.instrument.MeterRegistry meters;
 
     @Autowired
     JdbcTemplate jdbc;
@@ -121,7 +124,12 @@ class SourceIngestIT extends IntegrationTest {
         BigDecimal before = jdbc.queryForObject(
                 "select risk_score from scores where account_id = 6 and is_current", BigDecimal.class);
 
+        double count = meters.counter("churn_ingest_rows", "entity", "services", "mode", "upsert", "result", "ok")
+                .count();
         HttpResponse<String> response = post("/api/v1/source/services", CSV, SERVICE_26_CSV);
+        assertThat(meters.counter("churn_ingest_rows", "entity", "services", "mode", "upsert", "result", "ok")
+                        .count())
+                .isEqualTo(count + 1);
 
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode body = tree(response);
@@ -154,7 +162,12 @@ class SourceIngestIT extends IntegrationTest {
                 + service(27, "service-0027", 7, "active", 100) + ","
                 + service(28, "service-0028", 8, "gone", 100) + "]";
 
+        double count = meters.counter("churn_ingest_rows", "entity", "services", "mode", "upsert", "result", "rejected")
+                .count();
         HttpResponse<String> response = post("/api/v1/source/services", APPLICATION_JSON, rows);
+        assertThat(meters.counter("churn_ingest_rows", "entity", "services", "mode", "upsert", "result", "rejected")
+                        .count())
+                .isEqualTo(count + 3);
 
         assertThat(response.statusCode()).isEqualTo(422);
         JsonNode body = tree(response);
@@ -271,11 +284,12 @@ class SourceIngestIT extends IntegrationTest {
                 "/api/v1/source/services",
                 APPLICATION_JSON,
                 "[{\"name\":\"fresh-service\",\"ownerId\":1,\"paymentTerm\":\"month\",\"expiresAt\":\"2026-12-01T00:00:00Z\","
-                        + "\"status\":\"active\",\"price\":900}]");
+                    + "\"status\":\"active\",\"price\":900}]");
 
         assertThat(response.statusCode()).isEqualTo(200);
         Map<String, Object> row = jdbc.queryForMap(
-                "select id, \"autoProlong\", \"createdAt\" = ?::timestamptz as at_model_now from services where name = 'fresh-service'",
+                "select id, \"autoProlong\", \"createdAt\" = ?::timestamptz as at_model_now from services where name ="
+                        + " 'fresh-service'",
                 IngestSupport.AS_OF);
         assertThat(row)
                 .containsEntry("id", 31L)

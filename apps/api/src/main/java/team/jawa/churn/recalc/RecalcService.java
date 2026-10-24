@@ -1,8 +1,11 @@
 package team.jawa.churn.recalc;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -44,11 +47,13 @@ public class RecalcService {
     private static final String RUN_COLUMNS =
             "id, trigger, started_at, finished_at, as_of, model_version, accounts_processed, status, error";
 
+    private final MeterRegistry meters;
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
     private final EventBus events;
 
-    RecalcService(JdbcClient jdbc, PlatformTransactionManager transactions, EventBus events) {
+    RecalcService(JdbcClient jdbc, PlatformTransactionManager transactions, EventBus events, MeterRegistry meters) {
+        this.meters = meters;
         this.jdbc = jdbc;
         this.events = events;
         this.transaction = new TransactionTemplate(transactions);
@@ -56,6 +61,24 @@ public class RecalcService {
     }
 
     public Outcome run(String trigger) {
+        Timer.Sample sample = Timer.start(meters);
+        Result result = Result.FAILED;
+        try {
+            Outcome outcome = execute(trigger);
+            result = outcome.result();
+            meters.counter("churn_recalc_accounts", "trigger", trigger).increment(outcome.accountsProcessed());
+            return outcome;
+        } finally {
+            sample.stop(meters.timer(
+                    "churn_recalc_duration",
+                    "trigger",
+                    trigger,
+                    "result",
+                    result.name().toLowerCase(Locale.ROOT)));
+        }
+    }
+
+    private Outcome execute(String trigger) {
         if (!hasWork() || runningElsewhere()) {
             return new Outcome(Result.SKIPPED, 0);
         }
@@ -114,9 +137,8 @@ public class RecalcService {
     private record Step(String status, int accounts, long modelVersion) {}
 
     private boolean hasWork() {
-        return jdbc.sql(
-                        "SELECT EXISTS (SELECT 1 FROM public.delta WHERE proc_date IS NULL)"
-                                + " OR EXISTS (SELECT 1 FROM public.scores WHERE is_current AND valid_until <= public.model_now())")
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM public.delta WHERE proc_date IS NULL) OR EXISTS (SELECT 1 FROM"
+                        + " public.scores WHERE is_current AND valid_until <= public.model_now())")
                 .query(Boolean.class)
                 .single();
     }

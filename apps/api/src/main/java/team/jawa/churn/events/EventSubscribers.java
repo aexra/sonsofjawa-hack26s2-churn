@@ -1,5 +1,7 @@
 package team.jawa.churn.events;
 
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.time.Duration;
@@ -26,7 +28,8 @@ public class EventSubscribers {
     private final ScheduledExecutorService heartbeats =
             Executors.newSingleThreadScheduledExecutor(runnable -> daemon(runnable, "event-heartbeat"));
 
-    EventSubscribers() {
+    EventSubscribers(MeterRegistry meters) {
+        Gauge.builder("churn_sse_clients", subscribers, Set::size).register(meters);
         heartbeats.scheduleAtFixedRate(
                 this::heartbeat, HEARTBEAT.toMillis(), HEARTBEAT.toMillis(), TimeUnit.MILLISECONDS);
     }

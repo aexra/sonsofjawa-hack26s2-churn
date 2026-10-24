@@ -156,6 +156,27 @@ class AnalyticsIT extends IntegrationTest {
     }
 
     @Test
+    void theCacheRefreshesWhenAnAlreadyVisibleRunFinishes() throws Exception {
+        loadAndRecalculate();
+        jdbc.update("update accounts set balance = balance + 100000 where id = 5");
+        long runId = jdbc.queryForObject(
+                "INSERT INTO recalc_runs (trigger, started_at, as_of, status)"
+                        + " VALUES ('manual', now(), public.model_now(), 'running') RETURNING id",
+                Long.class);
+        Summary running = cache.get();
+        assertThat(running.lastRecalc().id()).isEqualTo(runId);
+        assertThat(running.lastRecalc().status()).isEqualTo("running");
+
+        jdbc.queryForMap("SELECT * FROM public.recalculate_risk('manual', ?)", runId);
+
+        Summary finished = cache.get();
+        assertThat(finished).isNotSameAs(running);
+        assertThat(finished.lastRecalc().id()).isEqualTo(runId);
+        assertThat(finished.lastRecalc().status()).isEqualTo("ok");
+        assertThat(finished.money().expectedLoss()).isLessThan(running.money().expectedLoss());
+    }
+
+    @Test
     void theCacheSeesAccountsThatAwaitACalculation() throws Exception {
         loadAndRecalculate();
         assertThat(cache.get().accounts().pending()).isZero();

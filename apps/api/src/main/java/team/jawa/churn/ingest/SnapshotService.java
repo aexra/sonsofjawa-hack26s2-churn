@@ -1,5 +1,6 @@
 package team.jawa.churn.ingest;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -54,6 +55,7 @@ public class SnapshotService {
     private final RecalcScheduler scheduler;
     private final EventBus events;
     private final JsonMapper json;
+    private final MeterRegistry meters;
 
     SnapshotService(
             IngestProperties properties,
@@ -66,7 +68,8 @@ public class SnapshotService {
             TransactionTemplate transaction,
             RecalcScheduler scheduler,
             EventBus events,
-            JsonMapper json) {
+            JsonMapper json,
+            MeterRegistry meters) {
         this.properties = properties;
         this.validator = validator;
         this.writer = writer;
@@ -78,6 +81,7 @@ public class SnapshotService {
         this.scheduler = scheduler;
         this.events = events;
         this.json = json;
+        this.meters = meters;
     }
 
     public Outcome replaceJson(byte[] body, Actor actor) {
@@ -85,6 +89,7 @@ public class SnapshotService {
         try {
             return applyJson(body, actor, received);
         } catch (ApiException e) {
+            recordRows("rejected", received[0]);
             reject(IngestFormat.JSON, actor, received[0], e);
             throw e;
         }
@@ -95,6 +100,7 @@ public class SnapshotService {
         try {
             return applyCsv(accounts, services, transactions, actor, received);
         } catch (ApiException e) {
+            recordRows("rejected", received[0]);
             reject(IngestFormat.CSV, actor, received[0], e);
             throw e;
         }
@@ -170,6 +176,7 @@ public class SnapshotService {
                     List.of(new IngestError(
                             null, null, null, "constraint_violation", "a database constraint was violated")));
         }
+        recordRows("ok", applied);
         RecalcScheduler.State state = scheduler.requestNow(SNAPSHOT);
         return new Outcome(logId[0], format, received[0], applied, accounts, services, transactions, state);
     }
@@ -183,6 +190,11 @@ public class SnapshotService {
         } catch (RuntimeException failure) {
             log.warn("rejected upload was not journaled: {}", failure.getMessage());
         }
+    }
+
+    private void recordRows(String result, int rows) {
+        meters.counter("churn_ingest_rows", "entity", SNAPSHOT, "mode", SNAPSHOT, "result", result)
+                .increment(rows);
     }
 
     private List<List<Map<String, Object>>> readJson(byte[] body) {

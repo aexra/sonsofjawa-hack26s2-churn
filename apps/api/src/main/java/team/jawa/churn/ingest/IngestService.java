@@ -1,5 +1,6 @@
 package team.jawa.churn.ingest;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -54,6 +55,7 @@ public class IngestService {
     private final RecalcScheduler scheduler;
     private final EventBus events;
     private final JsonMapper json;
+    private final MeterRegistry meters;
 
     IngestService(
             IngestProperties properties,
@@ -65,7 +67,8 @@ public class IngestService {
             TransactionTemplate transaction,
             RecalcScheduler scheduler,
             EventBus events,
-            JsonMapper json) {
+            JsonMapper json,
+            MeterRegistry meters) {
         this.properties = properties;
         this.validator = validator;
         this.writer = writer;
@@ -76,6 +79,7 @@ public class IngestService {
         this.scheduler = scheduler;
         this.events = events;
         this.json = json;
+        this.meters = meters;
     }
 
     public Outcome upsert(SourceEntity entity, IngestFormat format, byte[] body, Actor actor) {
@@ -83,6 +87,8 @@ public class IngestService {
         try {
             return apply(entity, format, body, actor, received);
         } catch (ApiException e) {
+            meters.counter("churn_ingest_rows", "entity", entity.path(), "mode", "upsert", "result", "rejected")
+                    .increment(received[0]);
             reject(entity, format, actor, received[0], e);
             throw e;
         }
@@ -131,6 +137,8 @@ public class IngestService {
                     List.of(new IngestError(
                             null, entity.path(), null, "constraint_violation", "a database constraint was violated")));
         }
+        meters.counter("churn_ingest_rows", "entity", entity.path(), "mode", "upsert", "result", "ok")
+                .increment(rows.size());
         RecalcScheduler.State state = scheduler.requestNow(INGEST_TRIGGER);
         return new Outcome(logId[0], entity, format, rows.size(), rows.size(), state);
     }

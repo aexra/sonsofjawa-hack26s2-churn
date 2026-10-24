@@ -36,6 +36,9 @@ class SourceSnapshotIT extends IntegrationTest {
     private static final String BOUNDARY = "snapboundary";
 
     @Autowired
+    io.micrometer.core.instrument.MeterRegistry meters;
+
+    @Autowired
     JdbcTemplate jdbc;
 
     @Autowired
@@ -63,6 +66,8 @@ class SourceSnapshotIT extends IntegrationTest {
     @Test
     void aJsonSnapshotLoadsTheTemplateAndScoresEveryAccount() throws Exception {
         byte[] body = Files.readAllBytes(TEMPLATE);
+        double count = meters.counter("churn_ingest_rows", "entity", "snapshot", "mode", "snapshot", "result", "ok")
+                .count();
 
         HttpResponse<String> response;
         List<String> events;
@@ -75,6 +80,9 @@ class SourceSnapshotIT extends IntegrationTest {
         }
 
         assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(meters.counter("churn_ingest_rows", "entity", "snapshot", "mode", "snapshot", "result", "ok")
+                        .count())
+                .isEqualTo(count + 140);
         JsonNode result = tree(response);
         assertThat(result.get("mode").asString()).isEqualTo("snapshot");
         assertThat(result.get("entity").asString()).isEqualTo("snapshot");
@@ -89,7 +97,8 @@ class SourceSnapshotIT extends IntegrationTest {
         assertThat(count("services")).isEqualTo(30);
         assertThat(count("transactions")).isEqualTo(100);
         assertThat(jdbc.queryForList(
-                        "select risk_score::text from scores where is_current and status = 'scored' order by account_id",
+                        "select risk_score::text from scores where is_current and status = 'scored' order by"
+                                + " account_id",
                         String.class))
                 .containsExactly("24.98", "23.33", "78.47", "19.18", "56.29", "55.00");
         assertThat(jdbc.queryForObject(
@@ -130,7 +139,8 @@ class SourceSnapshotIT extends IntegrationTest {
         assertThat(tree(response).get("applied").get("transactions").asInt()).isEqualTo(90);
         await().atMost(Duration.ofSeconds(20))
                 .until(() -> jdbc.queryForObject(
-                                "select count(*) from scores where account_id = 10 and is_current and status = 'removed'",
+                                "select count(*) from scores where account_id = 10 and is_current and status ="
+                                        + " 'removed'",
                                 Integer.class)
                         == 1);
         awaitIdle();
@@ -195,9 +205,15 @@ class SourceSnapshotIT extends IntegrationTest {
                 + "\"autoProlong\":false,\"createdAt\":\"2026-10-01T10:00:00Z\",\"expiresAt\":\"2026-11-01T10:00:00Z\","
                 + "\"status\":\"active\",\"price\":10}],\"transactions\":[]}";
 
+        double count = meters.counter(
+                        "churn_ingest_rows", "entity", "snapshot", "mode", "snapshot", "result", "rejected")
+                .count();
         HttpResponse<String> status = put(APPLICATION_JSON, badStatus.getBytes(StandardCharsets.UTF_8));
         HttpResponse<String> reference = put(APPLICATION_JSON, outside.getBytes(StandardCharsets.UTF_8));
 
+        assertThat(meters.counter("churn_ingest_rows", "entity", "snapshot", "mode", "snapshot", "result", "rejected")
+                        .count())
+                .isEqualTo(count + 4);
         assertThat(status.statusCode()).isEqualTo(422);
         JsonNode statusError = tree(status).get("errors").get(0);
         assertThat(statusError.get("entity").asString()).isEqualTo("services");

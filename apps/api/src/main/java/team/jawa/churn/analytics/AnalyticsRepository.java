@@ -15,7 +15,8 @@ class AnalyticsRepository {
     private static final int BUCKETS = 10;
     private static final int BUCKET_WIDTH = 10;
 
-    record Fingerprint(long recalcRun, long modelVersion, long delta, OffsetDateTime clockUpdatedAt) {}
+    record Fingerprint(
+            long recalcRun, long completedRuns, long modelVersion, long delta, OffsetDateTime clockUpdatedAt) {}
 
     private final JdbcClient jdbc;
     private final RecalcService recalc;
@@ -28,11 +29,13 @@ class AnalyticsRepository {
     Fingerprint fingerprint() {
         return jdbc.sql("SELECT"
                         + " (SELECT coalesce(max(id), 0) FROM public.recalc_runs) AS recalc_run,"
+                        + " (SELECT count(*) FROM public.recalc_runs WHERE finished_at IS NOT NULL) AS completed_runs,"
                         + " (SELECT coalesce(max(version), 0) FROM public.model_revisions) AS model_version,"
                         + " (SELECT coalesce(max(id), 0) FROM public.delta) AS delta,"
                         + " (SELECT updated_at FROM public.model_clock) AS clock_updated_at")
                 .query((rs, row) -> new Fingerprint(
                         rs.getLong("recalc_run"),
+                        rs.getLong("completed_runs"),
                         rs.getLong("model_version"),
                         rs.getLong("delta"),
                         rs.getObject("clock_updated_at", OffsetDateTime.class)))
