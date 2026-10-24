@@ -1,4 +1,5 @@
-import { useModelThresholds, type CustomerScore } from '@/entities/customer';
+import { type CustomerScore } from '@/entities/customer';
+import { findSettingValue, useModelSettings } from '@/entities/model-settings';
 import { RiskBadge } from '@/entities/risk-level';
 import { ru } from '@/shared/i18n/ru';
 import { formatDateTime, formatScore } from '@/shared/lib/format';
@@ -18,7 +19,9 @@ function Heading() {
 }
 
 export function ScoreCard({ score }: { score: CustomerScore }) {
-  const { levelHigh, levelMedium } = useModelThresholds();
+  const settings = useModelSettings().data;
+  const levelHigh = findSettingValue(settings, 'level_high');
+  const levelMedium = findSettingValue(settings, 'level_medium');
   const shell = 'flex flex-col gap-4 rounded-md border border-line bg-surface p-4';
 
   if (score.status === 'no_score') {

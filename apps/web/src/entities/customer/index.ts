@@ -26,4 +26,3 @@ export {
   type ScoreHistoryPoint,
 } from './model/details';
 export { customerLinkState, listPathFrom } from './model/list-link';
-export { useModelThresholds } from './model/model-thresholds';

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '@/test/setup';
 
-import { admin, analyst, problem, renderAt, signedInAs } from './test-utils';
+import { admin, analyst, problem, renderAt, signedInAs, stubChartSize } from './test-utils';
 
 const plain = (value: string | null) => (value ?? '').replaceAll(new RegExp('[  ]', 'g'), ' ');
 
@@ -151,17 +151,7 @@ const overviewHandlers = (
 
 describe('overview page', () => {
   beforeEach(() => {
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      right: 1100,
-      bottom: 260,
-      width: 1100,
-      height: 260,
-      toJSON: () => ({}),
-    });
+    stubChartSize(1100, 260);
   });
 
   afterEach(() => {

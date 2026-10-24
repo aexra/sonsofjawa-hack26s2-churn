@@ -1,12 +1,8 @@
 import { useMemo } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
-import {
-  listPathFrom,
-  useCustomer,
-  useModelThresholds,
-  type CustomerDetails,
-} from '@/entities/customer';
+import { listPathFrom, useCustomer, type CustomerDetails } from '@/entities/customer';
+import { findSettingValue, useModelSettings } from '@/entities/model-settings';
 import { ApiError } from '@/shared/api/api-error';
 import { errorMessage } from '@/shared/api/error-message';
 import { ru } from '@/shared/i18n/ru';
@@ -48,7 +44,7 @@ function NotFound({ id, listPath }: { id: string; listPath: string }) {
 
 function CustomerContent({ id, details }: { id: number; details: CustomerDetails }) {
   const { account, score, services, transactions } = details;
-  const { graceDays } = useModelThresholds();
+  const graceDays = findSettingValue(useModelSettings().data, 'grace_days');
   const serviceNames = useMemo(
     () => new Map(services.map((service) => [service.id, service.name])),
     [services],

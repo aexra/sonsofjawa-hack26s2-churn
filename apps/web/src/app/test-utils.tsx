@@ -2,12 +2,18 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
+import { vi } from 'vitest';
 
 import { Toaster } from '@/shared/ui/toaster';
 import { TooltipProvider } from '@/shared/ui/tooltip';
 
 import { createQueryClient } from './query-client';
 import { routes } from './router';
+
+export const stubChartSize = (width: number, height: number) =>
+  vi
+    .spyOn(Element.prototype, 'getBoundingClientRect')
+    .mockReturnValue(new DOMRect(0, 0, width, height));
 
 export const admin = { id: 1, login: 'admin', role: 'admin', authProvider: 'local' };
 export const analyst = { id: 2, login: 'analyst', role: 'user', authProvider: 'local' };

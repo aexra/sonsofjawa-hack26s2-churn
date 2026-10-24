@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '@/test/setup';
 
-import { admin, problem, renderAt, signedInAs } from './test-utils';
+import { admin, problem, renderAt, signedInAs, stubChartSize } from './test-utils';
 
 const reason = (key: string, title: string, text: string, contribution: number) => ({
   key,
@@ -330,9 +330,7 @@ describe('customer card', () => {
 
 describe('score history', () => {
   beforeEach(() => {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
-      new DOMRect(0, 0, 560, 240),
-    );
+    stubChartSize(560, 240);
   });
 
   afterEach(() => {
