@@ -55,6 +55,10 @@ public class AuthService {
             log.warn("login rejected for disabled account: login={} ip={}", logged, remoteAddress);
             throw new ApiException(HttpStatus.FORBIDDEN, "account_disabled", "account is disabled");
         }
+        return openSession(user);
+    }
+
+    public Session openSession(UserAccount user) {
         users.touchLastLogin(user.id());
         return new Session(user, jwt.issue(user), refreshTokens.issue(user.id()));
     }

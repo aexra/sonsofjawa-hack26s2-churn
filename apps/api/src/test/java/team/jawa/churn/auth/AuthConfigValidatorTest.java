@@ -41,8 +41,22 @@ class AuthConfigValidatorTest {
 
     @Test
     void startsWithOidcOnly() {
-        runner.withPropertyValues("auth.local-enabled=false", "oidc.issuer-uri=https://idp.example/realms/r")
+        runner.withPropertyValues(
+                        "auth.local-enabled=false",
+                        "oidc.issuer-uri=https://idp.example/realms/r",
+                        "oidc.client-id=churn",
+                        "oidc.client-secret=secret")
                 .run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    void failsWhenOidcHasNoClientCredentials() {
+        runner.withPropertyValues("oidc.issuer-uri=https://idp.example/realms/r")
+                .run(context -> assertThat(context)
+                        .hasFailed()
+                        .getFailure()
+                        .hasRootCauseMessage(
+                                "OIDC_CLIENT_ID and OIDC_CLIENT_SECRET are required with OIDC_ISSUER_URI"));
     }
 
     @Test

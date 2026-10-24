@@ -5,14 +5,20 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestCustomizers;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
@@ -29,10 +35,15 @@ import team.jawa.churn.auth.AuthProperties;
 import team.jawa.churn.auth.CookieService;
 import team.jawa.churn.auth.JwtCookieAuthenticationFilter;
 import team.jawa.churn.auth.JwtService;
+import team.jawa.churn.auth.OidcClientRegistrations;
+import team.jawa.churn.auth.OidcLoginHandlers;
+import team.jawa.churn.auth.SignedCookieAuthorizationRequestRepository;
 import team.jawa.churn.web.ProblemWriter;
 
 @Configuration
 class SecurityConfig {
+
+    private static final String OIDC_AUTHORIZE_PATH = "/api/v1/auth/oidc/authorize";
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -46,14 +57,17 @@ class SecurityConfig {
             JwtService jwt,
             CookieService cookies,
             ApiKeyService apiKeys,
-            ProblemWriter problems)
+            ProblemWriter problems,
+            ObjectProvider<OidcClientRegistrations> oidcRegistrations,
+            ObjectProvider<SignedCookieAuthorizationRequestRepository> oidcRequests,
+            ObjectProvider<OidcLoginHandlers> oidcHandlers)
             throws Exception {
         CookieCsrfTokenRepository csrfRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfRepository.setCookieCustomizer(cookie -> cookie.sameSite("Strict").secure(auth.cookieSecure()));
         RequestMatcher hasAuthorizationHeader = request -> request.getHeader("Authorization") != null;
         PathPatternRequestMatcher.Builder paths = PathPatternRequestMatcher.withDefaults();
 
-        return http.csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
+        http.csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())
                         .ignoringRequestMatchers(
@@ -103,8 +117,55 @@ class SecurityConfig {
                             } else {
                                 problems.write(response, HttpStatus.FORBIDDEN, "forbidden", "access denied");
                             }
-                        }))
-                .build();
+                        }));
+        OidcClientRegistrations registrations = oidcRegistrations.getIfAvailable();
+        if (registrations != null) {
+            enableOidc(http, registrations, oidcRequests.getObject(), oidcHandlers.getObject());
+        }
+        return http.build();
+    }
+
+    private static void enableOidc(
+            HttpSecurity http,
+            OidcClientRegistrations registrations,
+            SignedCookieAuthorizationRequestRepository requests,
+            OidcLoginHandlers handlers)
+            throws Exception {
+        DefaultOAuth2AuthorizationRequestResolver resolver =
+                new DefaultOAuth2AuthorizationRequestResolver(registrations, OIDC_AUTHORIZE_PATH);
+        resolver.setAuthorizationRequestCustomizer(OAuth2AuthorizationRequestCustomizers.withPkce());
+        http.oauth2Login(login -> login.clientRegistrationRepository(registrations)
+                .loginPage("/api/v1/auth/oidc/login")
+                .authorizedClientRepository(new DiscardingAuthorizedClientRepository())
+                .authorizationEndpoint(endpoint -> endpoint.baseUri(OIDC_AUTHORIZE_PATH)
+                        .authorizationRequestRepository(requests)
+                        .authorizationRequestResolver(resolver))
+                .redirectionEndpoint(endpoint -> endpoint.baseUri("/api/v1/auth/oidc/callback"))
+                .successHandler(handlers.success())
+                .failureHandler(handlers.failure()));
+    }
+
+    private static final class DiscardingAuthorizedClientRepository implements OAuth2AuthorizedClientRepository {
+
+        @Override
+        public <T extends OAuth2AuthorizedClient> T loadAuthorizedClient(
+                String clientRegistrationId, Authentication principal, HttpServletRequest request) {
+            return null;
+        }
+
+        @Override
+        public void saveAuthorizedClient(
+                OAuth2AuthorizedClient authorizedClient,
+                Authentication principal,
+                HttpServletRequest request,
+                HttpServletResponse response) {}
+
+        @Override
+        public void removeAuthorizedClient(
+                String clientRegistrationId,
+                Authentication principal,
+                HttpServletRequest request,
+                HttpServletResponse response) {}
     }
 
     private static final class CsrfCookieFilter extends OncePerRequestFilter {

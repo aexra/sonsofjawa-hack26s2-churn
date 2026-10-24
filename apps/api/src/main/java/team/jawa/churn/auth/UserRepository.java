@@ -53,6 +53,34 @@ public class UserRepository {
                 .single();
     }
 
+    public Optional<UserAccount> findByOidcSubject(String subject) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM public.users WHERE oidc_subject = :subject")
+                .param("subject", subject)
+                .query(UserRepository::map)
+                .optional();
+    }
+
+    public long insertOidc(String login, String displayName, String email, String role, String subject) {
+        return jdbc.sql("INSERT INTO public.users (login, display_name, email, role, auth_provider, oidc_subject)"
+                        + " VALUES (:login, :displayName, :email, :role, 'oidc', :subject) RETURNING id")
+                .param("login", login)
+                .param("displayName", displayName, Types.VARCHAR)
+                .param("email", email, Types.VARCHAR)
+                .param("role", role)
+                .param("subject", subject)
+                .query(Long.class)
+                .single();
+    }
+
+    public void updateOidc(long id, String role, String displayName, String email) {
+        jdbc.sql("UPDATE public.users SET role = :role, display_name = :displayName, email = :email WHERE id = :id")
+                .param("id", id)
+                .param("role", role)
+                .param("displayName", displayName, Types.VARCHAR)
+                .param("email", email, Types.VARCHAR)
+                .update();
+    }
+
     public List<UserAccount> findAll() {
         return jdbc.sql("SELECT " + COLUMNS + " FROM public.users ORDER BY id")
                 .query(UserRepository::map)

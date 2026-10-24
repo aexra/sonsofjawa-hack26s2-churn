@@ -7,7 +7,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.context.TestPropertySource;
 import team.jawa.churn.IntegrationTest;
 
-@TestPropertySource(properties = {"auth.local-enabled=false", "oidc.issuer-uri=https://idp.example/realms/test"})
+@TestPropertySource(
+        properties = {
+            "auth.local-enabled=false",
+            "oidc.issuer-uri=https://idp.example/realms/test",
+            "oidc.client-id=churn",
+            "oidc.client-secret=secret"
+        })
 class LocalAuthDisabledIT extends IntegrationTest {
 
     @Test

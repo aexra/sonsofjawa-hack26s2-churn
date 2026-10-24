@@ -58,3 +58,10 @@ auth:
 oidc:
   issuer-uri: ${OIDC_ISSUER_URI:}
   display-name: ${OIDC_DISPLAY_NAME:keycloak}
+  client-id: ${OIDC_CLIENT_ID:}
+  client-secret: ${OIDC_CLIENT_SECRET:}
+  scopes: ${OIDC_SCOPES:openid profile email}
+  roles-claim: ${OIDC_ROLES_CLAIM:roles}
+  admin-role: ${OIDC_ADMIN_ROLE:admin}
+  user-role: ${OIDC_USER_ROLE:user}
+  public-url: ${PUBLIC_URL:http://localhost:8080}

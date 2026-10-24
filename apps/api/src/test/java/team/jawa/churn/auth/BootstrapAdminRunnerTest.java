@@ -21,7 +21,10 @@ class BootstrapAdminRunnerTest {
         AuthProperties auth = new AuthProperties(
                 true, "", Duration.ofMinutes(15), Duration.ofDays(30), false, "Admin", adminPassword, "analyst", "");
         return new BootstrapAdminRunner(
-                auth, new OidcProperties(issuer, "sso"), users, NoOpPasswordEncoder.getInstance());
+                auth,
+                new OidcProperties(issuer, "sso", "", "", "openid", "roles", "admin", "user", "http://localhost:8080"),
+                users,
+                NoOpPasswordEncoder.getInstance());
     }
 
     @Test
