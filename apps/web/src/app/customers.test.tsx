@@ -275,15 +275,14 @@ describe('customers filter', () => {
   it('shows the filtered empty state and clears filters from it', async () => {
     server.use(
       ...signedInAs(admin),
-      http.get('*/api/v1/customers', ({ request }) => {
-        const filtered = new URL(request.url).searchParams.has('q');
+      http.get('*/api/v1/customers', () => {
         return HttpResponse.json({
           items: [],
           fields: [],
           sort: [],
           page: 0,
           size: 25,
-          totalItems: filtered ? 0 : 0,
+          totalItems: 0,
           totalPages: 0,
         });
       }),
