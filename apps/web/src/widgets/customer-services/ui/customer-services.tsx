@@ -10,8 +10,8 @@ import {
 
 import { ru } from '@/shared/i18n/ru';
 import { cn } from '@/shared/lib/cn';
-import { plural } from '@/shared/lib/plural';
 import { formatDate, formatDateTime, formatMoney } from '@/shared/lib/format';
+import { plural } from '@/shared/lib/plural';
 import { DataTable } from '@/shared/ui/data-table';
 import { StatusTag } from '@/shared/ui/status-tag';
 
