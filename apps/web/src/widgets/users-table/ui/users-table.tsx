@@ -6,6 +6,7 @@ import { useUsers, type User } from '@/entities/user';
 import { DeleteUserDialog, EditUserDialog, ToggleUserButton } from '@/features/user-edit';
 import { ru } from '@/shared/i18n/ru';
 import { formatDateTime } from '@/shared/lib/format';
+import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { DataTable } from '@/shared/ui/data-table';
 import { EmptyState } from '@/shared/ui/empty-state';
@@ -32,14 +33,10 @@ function RoleCell({ user }: { user: User }) {
 }
 
 function ActiveCell({ user }: { user: User }) {
-  const Icon = user.enabled ? CircleCheck : CircleMinus;
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 ${user.enabled ? 'text-positive' : 'text-ink-muted'}`}
-    >
-      <Icon aria-hidden="true" className="size-4" />
+    <Badge tone={user.enabled ? 'low' : 'none'} icon={user.enabled ? CircleCheck : CircleMinus}>
       {user.enabled ? ru.access.users.yes : ru.access.users.no}
-    </span>
+    </Badge>
   );
 }
 
@@ -77,11 +74,14 @@ export function UsersTable() {
             label: columns.login,
             mono: true,
             render: (row) => (
-              <span>
-                {row.login}
-                {row.id === current?.id && (
-                  <span className="font-sans text-ink-muted">{ru.access.users.you}</span>
-                )}
+              <span className="inline-flex items-center gap-2.5">
+                <span
+                  aria-hidden="true"
+                  data-letter={row.login.charAt(0)}
+                  className="grid size-7 flex-none place-items-center rounded-sm border border-line bg-tile font-sans text-label text-on-tile before:content-[attr(data-letter)]"
+                />
+                <span className="font-semibold">{row.login}</span>
+                {row.id === current?.id && <Badge size="sm">{ru.access.users.you}</Badge>}
               </span>
             ),
           },
@@ -91,8 +91,13 @@ export function UsersTable() {
           {
             key: 'method',
             label: columns.method,
-            render: (row) =>
-              row.authProvider === 'oidc' ? ru.access.users.methodSso : ru.access.users.methodLocal,
+            render: (row) => (
+              <Badge tone="none">
+                {row.authProvider === 'oidc'
+                  ? ru.access.users.methodSso
+                  : ru.access.users.methodLocal}
+              </Badge>
+            ),
           },
           { key: 'active', label: columns.active, render: (row) => <ActiveCell user={row} /> },
           {
@@ -117,7 +122,7 @@ export function UsersTable() {
                         <ToggleUserButton user={row} blocked />
                       </Tooltip>
                       <Tooltip content={ru.access.users.cannotDeleteSelf}>
-                        <Button variant="ghost" size="sm" blocked>
+                        <Button variant="ghost-danger" size="sm" blocked>
                           {ru.access.users.delete}
                         </Button>
                       </Tooltip>
@@ -125,7 +130,7 @@ export function UsersTable() {
                   ) : (
                     <>
                       <ToggleUserButton user={row} />
-                      <Button variant="ghost" size="sm" onClick={() => setDeleting(row)}>
+                      <Button variant="ghost-danger" size="sm" onClick={() => setDeleting(row)}>
                         {ru.access.users.delete}
                       </Button>
                     </>

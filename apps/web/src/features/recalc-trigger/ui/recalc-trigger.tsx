@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 
 import { useRecalcStatus, type RecalcStatus } from '@/entities/recalc';
 import { useLiveEvent } from '@/shared/api/live-events';
@@ -59,9 +60,21 @@ export function RecalcTrigger() {
       aria-labelledby="recalc-heading"
       className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4"
     >
-      <h2 id="recalc-heading" className="m-0 font-display text-heading">
-        {ru.ingest.recalc.title}
-      </h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="recalc-heading" className="m-0 font-display text-heading">
+          {ru.ingest.recalc.title}
+        </h2>
+        {summary && (
+          <span
+            role="status"
+            aria-live="polite"
+            className="inline-flex h-7 items-center gap-2 rounded-full border border-line bg-surface px-3 text-caption whitespace-nowrap text-ink-muted"
+          >
+            <span aria-hidden="true" className={cn('size-2 rounded-full', DOT[summary.tone])} />
+            {summary.text}
+          </span>
+        )}
+      </div>
       {status.isPending && <Skeleton className="h-28" />}
       {status.isError && (
         <p role="alert" className="m-0 text-negative">
@@ -70,14 +83,6 @@ export function RecalcTrigger() {
       )}
       {summary && status.data && (
         <>
-          <span
-            role="status"
-            aria-live="polite"
-            className="inline-flex h-7 items-center gap-2 self-stretch rounded-full border border-line bg-surface px-3 text-caption whitespace-nowrap text-ink-muted"
-          >
-            <span aria-hidden="true" className={cn('size-2 rounded-full', DOT[summary.tone])} />
-            {summary.text}
-          </span>
           <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 text-data">
             <dt className="text-ink-muted">{ru.ingest.recalc.lastRun}</dt>
             <dd className="m-0 font-mono">
@@ -97,12 +102,17 @@ export function RecalcTrigger() {
         </>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" disabled={request.isPending} onClick={() => request.mutate('pending')}>
+        <Button
+          variant="primary"
+          className="flex-auto"
+          disabled={request.isPending}
+          onClick={() => request.mutate('pending')}
+        >
+          <RefreshCw aria-hidden="true" className="size-4" />
           {ru.ingest.recalc.now}
         </Button>
         <Button
-          variant="ghost"
-          size="sm"
+          className="flex-auto"
           disabled={request.isPending}
           onClick={() => request.mutate('all')}
         >

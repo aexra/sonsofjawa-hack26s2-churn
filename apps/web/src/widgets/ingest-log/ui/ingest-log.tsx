@@ -5,6 +5,7 @@ import { ErrorTable, useIngestLog, type IngestLogEntry } from '@/entities/ingest
 import { ru } from '@/shared/i18n/ru';
 import { formatDateTime, formatInt } from '@/shared/lib/format';
 import { plural } from '@/shared/lib/plural';
+import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { DataTable } from '@/shared/ui/data-table';
 import { EmptyState } from '@/shared/ui/empty-state';
@@ -23,10 +24,9 @@ function ResultCell({
 }) {
   if (entry.status === 'ok') {
     return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-positive">
-        <CircleCheck aria-hidden="true" className="size-4" />
+      <Badge tone="low" icon={CircleCheck}>
         {ru.ingest.log.ok}
-      </span>
+      </Badge>
     );
   }
   const count = entry.errors.length;

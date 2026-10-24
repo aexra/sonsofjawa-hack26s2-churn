@@ -245,7 +245,7 @@ describe('users page', () => {
 
     await screen.findByRole('table', { name: 'пользователи' });
     const self = rowOf('admin');
-    expect(self.getByText('· вы', { exact: false })).toBeInTheDocument();
+    expect(self.getByText('вы')).toBeInTheDocument();
     expect(self.getByRole('button', { name: 'отключить' })).toHaveAttribute(
       'aria-disabled',
       'true',

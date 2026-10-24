@@ -622,7 +622,7 @@ export const ru = {
         lastLogin: 'последний вход',
         actions: 'действия',
       },
-      you: ' · вы',
+      you: 'вы',
       methodLocal: 'пароль',
       methodSso: 'SSO',
       yes: 'да',

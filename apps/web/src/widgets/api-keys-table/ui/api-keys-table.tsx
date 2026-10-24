@@ -1,29 +1,30 @@
-import { CircleCheck, CircleMinus, Clock, type LucideIcon } from 'lucide-react';
+import { CircleCheck, CircleMinus, Clock, KeyRound, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { apiKeyStatus, useApiKeys, type ApiKey, type ApiKeyStatus } from '@/entities/api-key';
 import { RevokeApiKeyDialog } from '@/features/api-key-revoke';
 import { ru } from '@/shared/i18n/ru';
 import { formatDate, formatDateTime } from '@/shared/lib/format';
+import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { DataTable } from '@/shared/ui/data-table';
 import { EmptyState } from '@/shared/ui/empty-state';
+import { IconTile } from '@/shared/ui/icon-tile';
 import { Skeleton } from '@/shared/ui/skeleton';
 
-const STATUS: Record<ApiKeyStatus, { icon: LucideIcon; tone: string }> = {
-  active: { icon: CircleCheck, tone: 'text-positive' },
-  revoked: { icon: CircleMinus, tone: 'text-ink-muted' },
-  expired: { icon: Clock, tone: 'text-warning' },
+const STATUS: Record<ApiKeyStatus, { icon: LucideIcon; tone: 'low' | 'medium' | 'none' }> = {
+  active: { icon: CircleCheck, tone: 'low' },
+  revoked: { icon: CircleMinus, tone: 'none' },
+  expired: { icon: Clock, tone: 'medium' },
 };
 
 function StatusCell({ keyItem }: { keyItem: ApiKey }) {
   const status = apiKeyStatus(keyItem);
-  const { icon: Icon, tone } = STATUS[status];
+  const { icon, tone } = STATUS[status];
   return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${tone}`}>
-      <Icon aria-hidden="true" className="size-4" />
+    <Badge tone={tone} icon={icon}>
       {ru.access.keys.status[status]}
-    </span>
+    </Badge>
   );
 }
 
@@ -56,7 +57,16 @@ export function ApiKeysTable() {
         rows={keys.data}
         rowKey={(row) => String(row.id)}
         columns={[
-          { key: 'name', label: columns.name, render: (row) => row.name },
+          {
+            key: 'name',
+            label: columns.name,
+            render: (row) => (
+              <span className="inline-flex items-center gap-2.5 font-semibold">
+                <IconTile icon={KeyRound} />
+                {row.name}
+              </span>
+            ),
+          },
           {
             key: 'prefix',
             label: columns.prefix,
@@ -69,12 +79,7 @@ export function ApiKeysTable() {
             render: (row) => (
               <span className="inline-flex flex-wrap gap-1.5">
                 {row.scopes.map((scope) => (
-                  <span
-                    key={scope}
-                    className="inline-flex h-5.5 items-center rounded-xs bg-risk-none-soft px-2 text-label text-risk-none"
-                  >
-                    {ru.access.keys.scopes[scope]}
-                  </span>
+                  <Badge key={scope}>{ru.access.keys.scopes[scope]}</Badge>
                 ))}
               </span>
             ),
@@ -107,7 +112,7 @@ export function ApiKeysTable() {
             label: columns.actions,
             render: (row) =>
               apiKeyStatus(row) === 'active' ? (
-                <Button variant="ghost" size="sm" onClick={() => setRevoking(row)}>
+                <Button variant="ghost-danger" size="sm" onClick={() => setRevoking(row)}>
                   {ru.access.keys.revoke}
                 </Button>
               ) : null,
