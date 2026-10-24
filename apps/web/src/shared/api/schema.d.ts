@@ -1056,7 +1056,7 @@ export interface components {
             /** Format: int64 */
             id: number;
             /** @enum {string} */
-            trigger: "timer" | "manual" | "model" | "snapshot" | "ingest" | "notify";
+            trigger: "timer" | "manual" | "model" | "snapshot" | "ingest";
             /** Format: date-time */
             startedAt: string;
             /** Format: date-time */
