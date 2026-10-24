@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/app/main.tsx",
+    "src/**/index.ts",
+    "src/**/*.test.{ts,tsx}",
+    "scripts/**/*.{mjs,js,ts}"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,js,ts}"],
+  "ignore": ["src/shared/api/schema.d.ts"],
+  "ignoreDependencies": [
+    "@fontsource-variable/jetbrains-mono",
+    "@fontsource-variable/montserrat",
+    "@fontsource-variable/roboto",
+    "tw-animate-css",
+    "tailwindcss"
+  ],
+  "ignoreBinaries": ["knip"]
+}
