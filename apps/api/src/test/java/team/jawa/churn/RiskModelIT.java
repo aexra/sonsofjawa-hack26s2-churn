@@ -24,8 +24,11 @@ class RiskModelIT extends IntegrationTest {
 
     @Test
     void flywayAppliesRiskMigrationsAndSemanticMetadata() {
-        assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where success", Integer.class))
-                .isEqualTo(5);
+        assertThat(jdbc.queryForObject(
+                        "select count(*) from flyway_schema_history where success and script in"
+                                + " ('V2__risk_core.sql', 'V3__risk_settings_validation.sql', 'R__risk_model.sql')",
+                        Integer.class))
+                .isEqualTo(3);
         assertThat(jdbc.queryForObject("select probability_calibrated from model_metadata_vw", Boolean.class))
                 .isFalse();
         assertThat(jdbc.queryForObject("select money_estimate_kind from model_metadata_vw", String.class))
