@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CircleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -74,7 +74,7 @@ function IssuedKeyDialog({ issued, onClose }: { issued: IssuedKey; onClose: () =
           role="alert"
           className="flex items-start gap-2.5 rounded-sm bg-risk-medium-soft px-3 py-2.5 text-ink"
         >
-          <CircleAlert aria-hidden="true" className="mt-0.5 size-4 flex-none text-risk-medium" />
+          <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 flex-none text-risk-medium" />
           <span>{ru.access.keys.warning(`ck_${issued.key.prefix}`)}</span>
         </div>
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
