@@ -582,3 +582,30 @@ SELECT
     'оценка выручки под риском'::text AS money_title,
     'взвешенная по эвристическому score часть тарифной выручки за горизонт, не покрытая доступными средствами для автопродления; не прогноз фактических убытков'::text AS money_description,
     'risk-score от 0 до 100 — приоритет внимания, а не вероятность ухода; веса относительные'::text AS score_description;
+
+CREATE OR REPLACE FUNCTION public.set_risk_settings(p_values jsonb, p_actor text)
+    RETURNS bigint LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_version bigint;
+BEGIN
+    IF jsonb_typeof(p_values) IS DISTINCT FROM 'object' OR p_actor IS NULL OR btrim(p_actor) = '' THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'settings must be an object and actor must be nonempty';
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_each(p_values) AS e WHERE jsonb_typeof(e.value) <> 'number') THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'setting values must be JSON numbers';
+    END IF;
+    PERFORM s.key FROM public.model_settings s ORDER BY s.key FOR UPDATE;
+    IF EXISTS (
+        SELECT 1 FROM jsonb_each(p_values) AS e
+        WHERE NOT EXISTS (SELECT 1 FROM public.model_settings s WHERE s.key = e.key)
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'unknown model setting';
+    END IF;
+    UPDATE public.model_settings s
+    SET value = (p_values ->> s.key)::numeric, updated_at = now(), updated_by = p_actor
+    WHERE p_values ? s.key AND s.value IS DISTINCT FROM (p_values ->> s.key)::numeric;
+    SELECT max(version) INTO v_version FROM public.model_revisions;
+    RETURN v_version;
+END
+$$;
