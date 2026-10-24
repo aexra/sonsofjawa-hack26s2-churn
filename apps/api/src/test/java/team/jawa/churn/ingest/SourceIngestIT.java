@@ -30,7 +30,7 @@ class SourceIngestIT extends IntegrationTest {
     private static final String APPLICATION_JSON = "application/json";
     private static final String SERVICE_26_CSV =
             "id,name,ownerId,paymentTerm,autoProlong,createdAt,expiresAt,status,price\n"
-                + "26,service-0026,6,week,false,2026-10-19T14:30:00.000Z,2026-10-26T14:30:00.000Z,prolong_wait,547\n";
+                    + "26,service-0026,6,week,false,2026-10-19T14:30:00.000Z,2026-10-26T14:30:00.000Z,prolong_wait,547\n";
 
     @Autowired
     io.micrometer.core.instrument.MeterRegistry meters;
@@ -284,7 +284,7 @@ class SourceIngestIT extends IntegrationTest {
                 "/api/v1/source/services",
                 APPLICATION_JSON,
                 "[{\"name\":\"fresh-service\",\"ownerId\":1,\"paymentTerm\":\"month\",\"expiresAt\":\"2026-12-01T00:00:00Z\","
-                    + "\"status\":\"active\",\"price\":900}]");
+                        + "\"status\":\"active\",\"price\":900}]");
 
         assertThat(response.statusCode()).isEqualTo(200);
         Map<String, Object> row = jdbc.queryForMap(
