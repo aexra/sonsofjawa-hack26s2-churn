@@ -20,7 +20,7 @@ import {
 } from './draft';
 import { useUpdateModelSettings } from './use-update-model-settings';
 
-import type { ModelSettings } from './settings';
+import type { ModelSettings } from '@/entities/model-settings';
 
 const FIELD_PREFIX = 'values.';
 

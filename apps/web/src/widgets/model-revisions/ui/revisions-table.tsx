@@ -1,4 +1,4 @@
-import { type ModelSettings } from '@/features/model-settings-edit';
+import { type ModelSettings } from '@/entities/model-settings';
 import { ru } from '@/shared/i18n/ru';
 import { formatDateTime } from '@/shared/lib/format';
 import { DataTable } from '@/shared/ui/data-table';

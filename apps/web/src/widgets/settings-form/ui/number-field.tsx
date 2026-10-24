@@ -5,7 +5,8 @@ import { ru } from '@/shared/i18n/ru';
 import { Field } from '@/shared/ui/field';
 import { Input } from '@/shared/ui/input';
 
-import type { DraftValues, ModelSetting } from '@/features/model-settings-edit';
+import type { ModelSetting } from '@/entities/model-settings';
+import type { DraftValues } from '@/features/model-settings-edit';
 
 const unitSuffix = (setting: ModelSetting): string => {
   const unit = ru.model.units[setting.unit];

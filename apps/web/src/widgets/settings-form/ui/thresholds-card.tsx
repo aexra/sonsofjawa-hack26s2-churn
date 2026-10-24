@@ -3,7 +3,8 @@ import { formatNumber } from '@/shared/lib/format-number';
 
 import { NumberField } from './number-field';
 
-import type { DraftValues, ModelSetting } from '@/features/model-settings-edit';
+import type { ModelSetting } from '@/entities/model-settings';
+import type { DraftValues } from '@/features/model-settings-edit';
 import type { Control } from 'react-hook-form';
 
 const LEVEL_HIGH = 'level_high';

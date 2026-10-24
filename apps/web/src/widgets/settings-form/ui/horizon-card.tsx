@@ -2,7 +2,8 @@ import { ru } from '@/shared/i18n/ru';
 
 import { NumberField } from './number-field';
 
-import type { DraftValues, ModelSetting } from '@/features/model-settings-edit';
+import type { ModelSetting } from '@/entities/model-settings';
+import type { DraftValues } from '@/features/model-settings-edit';
 import type { Control } from 'react-hook-form';
 
 interface HorizonCardProps {

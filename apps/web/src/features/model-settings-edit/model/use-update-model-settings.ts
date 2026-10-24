@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient, unwrap } from '@/shared/api/client';
 import { queryKeys } from '@/shared/api/query-keys';
 
-import type { ModelSettingsPatch } from './settings';
+import type { ModelSettingsPatch } from '@/entities/model-settings';
 
 export function useUpdateModelSettings() {
   const queryClient = useQueryClient();

@@ -1,14 +1,13 @@
 import { z } from 'zod';
 
-import { ru } from '@/shared/i18n/ru';
-import { fromLocalInput, toLocalInput } from '@/shared/lib/local-datetime';
-
 import {
   allSettings,
   type ClockMode,
   type ModelSettings,
   type ModelSettingsPatch,
-} from './settings';
+} from '@/entities/model-settings';
+import { ru } from '@/shared/i18n/ru';
+import { fromLocalInput, toLocalInput } from '@/shared/lib/local-datetime';
 
 export interface DraftValues {
   values: Record<string, number>;

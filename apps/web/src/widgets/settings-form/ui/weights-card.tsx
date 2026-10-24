@@ -10,7 +10,8 @@ import { Tooltip } from '@/shared/ui/tooltip';
 
 import { displayNumber, parseNumber } from './number-field';
 
-import type { DraftValues, ModelSetting } from '@/features/model-settings-edit';
+import type { ModelSetting } from '@/entities/model-settings';
+import type { DraftValues } from '@/features/model-settings-edit';
 
 interface WeightRowProps {
   setting: ModelSetting;

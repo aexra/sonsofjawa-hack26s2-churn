@@ -1,5 +1,5 @@
+import { useModelSettings } from '@/entities/model-settings';
 import { useSession } from '@/entities/session';
-import { useModelSettings } from '@/features/model-settings-edit';
 import { ru } from '@/shared/i18n/ru';
 import { formatDateTime } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/button';

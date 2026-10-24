@@ -6,7 +6,6 @@ import {
   SettingsBar,
   UnsavedChangesGuard,
   useSettingsEditor,
-  type ModelSettings,
 } from '@/features/model-settings-edit';
 import { ru } from '@/shared/i18n/ru';
 import { Button } from '@/shared/ui/button';
@@ -14,6 +13,8 @@ import { Button } from '@/shared/ui/button';
 import { HorizonCard } from './horizon-card';
 import { ThresholdsCard } from './thresholds-card';
 import { WeightsCard } from './weights-card';
+
+import type { ModelSettings } from '@/entities/model-settings';
 
 interface SettingsFormProps {
   settings: ModelSettings;

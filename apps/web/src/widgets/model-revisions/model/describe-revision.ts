@@ -1,4 +1,4 @@
-import { allSettings, isWeight, type ModelSettings } from '@/features/model-settings-edit';
+import { allSettings, isWeight, type ModelSettings } from '@/entities/model-settings';
 import { ru } from '@/shared/i18n/ru';
 import { formatDateTime } from '@/shared/lib/format';
 import { formatNumber } from '@/shared/lib/format-number';

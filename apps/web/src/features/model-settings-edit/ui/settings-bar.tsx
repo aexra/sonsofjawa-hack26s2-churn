@@ -1,8 +1,7 @@
+import { allSettings, isWeight } from '@/entities/model-settings';
 import { ru } from '@/shared/i18n/ru';
 import { formatNumber } from '@/shared/lib/format-number';
 import { Button } from '@/shared/ui/button';
-
-import { allSettings, isWeight } from '../model/settings';
 
 import type { useSettingsEditor } from '../model/use-settings-editor';
 import type { ReactNode } from 'react';
