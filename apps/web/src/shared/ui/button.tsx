@@ -5,7 +5,7 @@ import { cn } from '@/shared/lib/cn';
 import type { ComponentProps } from 'react';
 
 export const buttonVariants = cva(
-  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm border text-body-strong whitespace-nowrap no-underline transition-colors duration-120 ease-out disabled:cursor-not-allowed disabled:border-line disabled:bg-surface-sunken disabled:text-ink-faint',
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm border text-body-strong whitespace-nowrap no-underline transition-colors duration-120 ease-out disabled:cursor-not-allowed disabled:border-line disabled:bg-surface-sunken disabled:text-ink-faint aria-disabled:cursor-not-allowed aria-disabled:border-line aria-disabled:bg-surface-sunken aria-disabled:text-ink-faint',
   {
     variants: {
       variant: {
@@ -24,13 +24,15 @@ export const buttonVariants = cva(
 );
 
 type ButtonProps = ComponentProps<'button'> &
-  VariantProps<typeof buttonVariants> & { loading?: boolean };
+  VariantProps<typeof buttonVariants> & { loading?: boolean; blocked?: boolean };
 
 export function Button({
   variant,
   size,
   loading = false,
+  blocked = false,
   disabled,
+  onClick,
   className,
   children,
   type = 'button',
@@ -41,6 +43,8 @@ export function Button({
       type={type}
       disabled={disabled ?? loading}
       aria-busy={loading || undefined}
+      aria-disabled={blocked || undefined}
+      onClick={blocked ? undefined : onClick}
       className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     >

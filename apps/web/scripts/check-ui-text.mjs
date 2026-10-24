@@ -13,6 +13,7 @@ export const EXCEPTIONS = new Set([
   'SSE',
   'KPI',
   'ISO',
+  'Authorization',
   'PostgreSQL',
   'Keycloak',
   'Prometheus',

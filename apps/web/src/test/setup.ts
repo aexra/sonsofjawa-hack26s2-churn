@@ -3,6 +3,14 @@ import { cleanup } from '@testing-library/react';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.assign(globalThis, { ResizeObserver: ResizeObserverStub });
+
 export const server = setupServer();
 
 Object.assign(window, {

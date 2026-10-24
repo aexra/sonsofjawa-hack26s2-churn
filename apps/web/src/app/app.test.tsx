@@ -1,48 +1,21 @@
-import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { TooltipProvider } from '@/shared/ui/tooltip';
 import { server } from '@/test/setup';
 
-import { createQueryClient } from './query-client';
-import { routes } from './router';
-
-const admin = { id: 1, login: 'admin', role: 'admin', authProvider: 'local' };
-const analyst = { id: 2, login: 'analyst', role: 'user', authProvider: 'local' };
-
-const problem = (status: number, code: string) =>
-  HttpResponse.json(
-    { type: 'about:blank', title: code, status, code },
-    { status, headers: { 'Content-Type': 'application/problem+json' } },
-  );
+import { admin, analyst, problem, renderAt, signedInAs } from './test-utils';
 
 const localLogin = http.get('*/api/v1/auth/providers', () =>
   HttpResponse.json({ local: { enabled: true }, oidc: { enabled: false } }),
 );
-
-const signedInAs = (user: object) => [http.get('*/api/v1/auth/me', () => HttpResponse.json(user))];
 
 const signedOut = [
   http.get('*/api/v1/auth/me', () => problem(401, 'unauthenticated')),
   http.post('*/api/v1/auth/refresh', () => problem(401, 'refresh_invalid')),
   localLogin,
 ];
-
-function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(
-    <QueryClientProvider client={createQueryClient()}>
-      <TooltipProvider>
-        <RouterProvider router={router} />
-      </TooltipProvider>
-    </QueryClientProvider>,
-  );
-  return router;
-}
 
 describe('route guards', () => {
   it('sends an anonymous visitor to the login page and remembers the target', async () => {
