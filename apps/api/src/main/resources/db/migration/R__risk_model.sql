@@ -171,9 +171,8 @@ svc AS (
              ELSE greatest(extract(epoch FROM s."expiresAt" - c.as_of) / 86400.0, 0)
         END AS days_left,
         s.status IN ('active', 'suspended') AND s."expiresAt" <= c.as_of AS expired_but_live,
-        s.status = 'prolong_wait' AND s."expiresAt" + p.grace_days * interval '1 day' < c.as_of AS overdue_prolong_wait,
+        s.status = 'prolong_wait' AND s."expiresAt" + p.grace_days * interval '1 day' <= c.as_of AS overdue_prolong_wait,
         (SELECT min(x) FROM unnest(ARRAY[
-            s."expiresAt" - p.horizon_days * interval '1 day',
             s."expiresAt",
             s."expiresAt" + p.grace_days * interval '1 day'
         ]) AS x WHERE x > c.as_of) AS next_boundary
@@ -192,6 +191,16 @@ svc2 AS (
         END AS renewals_h
     FROM svc CROSS JOIN p
 ),
+svc3 AS (
+    SELECT
+        svc2.*,
+        CASE WHEN is_live AND status <> 'prolong_wait' AND expires_at >= c.as_of
+             THEN c.as_of
+                  + (renewals_h * term_days - (p.horizon_days - days_left)) * interval '1 day'
+                  + interval '1 millisecond'
+        END AS next_renewal_boundary
+    FROM svc2 CROSS JOIN clock c CROSS JOIN p
+),
 agg AS (
     SELECT
         account_id,
@@ -206,10 +215,10 @@ agg AS (
         coalesce(sum(revenue_h) FILTER (WHERE auto_prolong AND status <> 'prolong_wait'), 0) AS revenue_auto,
         coalesce(sum(price * renewals_h), 0) AS required_h,
         min(expires_at) FILTER (WHERE is_live AND status <> 'prolong_wait' AND days_left > 0) AS next_expiry_at,
-        min(next_boundary) FILTER (WHERE is_live) AS next_boundary,
+        least(min(next_boundary) FILTER (WHERE is_live), min(next_renewal_boundary)) AS next_boundary,
         bool_or(expired_but_live) AS any_expired_but_live,
         bool_or(overdue_prolong_wait) AS any_overdue_prolong_wait
-    FROM svc2
+    FROM svc3
     GROUP BY account_id
 ),
 top_unsecured AS (
@@ -252,7 +261,8 @@ base AS (
         coalesce(a.balance, 0) AS balance,
         coalesce(a."withdrawBalance", 0) AS withdraw_balance,
         coalesce(a."totalReplenished", 0) AS total_replenished,
-        coalesce(a.balance, 0) + CASE WHEN a."bonusState" = 'unlocked' THEN a."bonusBalance" ELSE 0 END AS funds,
+        coalesce(a.balance, 0)::numeric
+            + CASE WHEN a."bonusState" = 'unlocked' THEN a."bonusBalance"::numeric ELSE 0 END AS funds,
         coalesce(g.services_total, 0) AS services_total,
         coalesce(g.services_live, 0) AS services_live,
         coalesce(g.services_terminated, 0) AS services_terminated,
@@ -493,7 +503,7 @@ x AS (
 )
 SELECT service_id, account_id, price, payment_term, expected_at, round(risk_weight, 4) AS risk_weight
 FROM x
-WHERE expected_at <= as_of + horizon_days * interval '1 day'
+WHERE expected_at < as_of + horizon_days * interval '1 day'
   AND risk_weight > 0;
 
 INSERT INTO public.model_revisions (changed_by, source, changes)

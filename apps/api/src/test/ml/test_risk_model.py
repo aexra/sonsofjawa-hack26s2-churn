@@ -351,6 +351,77 @@ class RiskModelTest(unittest.TestCase):
         self.assertEqual(int(self.sql('SELECT count(*) FROM model_revisions;')), before + 1)
         self.assertGreater(self.score()['model_version'], 0)
 
+    def test_available_funds_sum_does_not_overflow_bigint(self):
+        self.account(balance=9000000000000000000, bonus=9000000000000000000,
+                     bonus_state='unlocked')
+        self.service()
+        row = self.score()
+        self.assertEqual(row['features']['insufficient_funds'], 0)
+        self.assertEqual(row['secured_amount'], row['revenue_horizon'])
+        self.assertEqual(row['expected_loss'], 0)
+
+    def test_forecast_excludes_right_horizon_boundary(self):
+        self.account()
+        self.service(auto=False)
+        self.service(service_id=102, auto=False, days=30)
+        self.persist_scores()
+        forecast = self.rows('SELECT service_id FROM churn_forecast_vw ORDER BY service_id')
+        self.assertEqual(forecast, [{'service_id': 101}])
+
+    def test_next_hourly_payment_sets_score_expiry(self):
+        self.account(balance=48000)
+        self.service(days=10.01, term='hour', price=100)
+        row = self.score()
+        self.assertEqual(row['features']['insufficient_funds'], 0)
+        self.assertEqual(row['valid_until'], '2026-10-19T15:14:24.001+00:00')
+        self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '14 minutes 25 seconds';")
+        row = self.score()
+        self.assertGreater(row['features']['insufficient_funds'], 0)
+        reason = next(r for r in row['reasons'] if r['key'] == 'insufficient_funds')
+        self.assertEqual(reason['params']['requiredAmount'], 48100)
+
+    def test_payment_exactly_on_horizon_boundary_expires_in_one_millisecond(self):
+        self.account()
+        self.service(days=30)
+        self.assertEqual(self.score()['valid_until'], '2026-10-19T15:00:00.001+00:00')
+        self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '1 millisecond';")
+        row = self.score()
+        self.assertEqual(row['features']['insufficient_funds'], 1)
+        self.assertGreater(row['risk_score'], 0)
+
+    def test_payment_wait_is_overdue_at_grace_boundary(self):
+        self.account()
+        self.service(status='prolong_wait', days=-5)
+        self.assertIn('overdue_prolong_wait', self.score()['anomalies'])
+
+    def test_renewal_boundaries_for_all_payment_terms(self):
+        self.account()
+        self.service(price=100)
+        cases = [
+            ('hour', 30, '10.01', 48000),
+            ('week', 30, '9.01', 300),
+            ('month', 60, '29.5725', 100),
+            ('quarter_year', 120, '28.6975', 100),
+            ('half_year', 200, '17.385', 100),
+            ('year', 365, '365.01', 0),
+        ]
+        for term, horizon, days, balance in cases:
+            with self.subTest(term=term):
+                self.sql(f"UPDATE model_clock SET frozen_at='{AS_OF}';")
+                self.sql(f"UPDATE model_settings SET value={horizon} WHERE key='horizon_days';")
+                self.sql(f'UPDATE accounts SET balance={balance} WHERE id=101;')
+                self.sql(f'''UPDATE services SET "paymentTerm"='{term}',
+                    "expiresAt"='{AS_OF}'::timestamptz + {days} * interval '1 day'
+                    WHERE id=101;''')
+                row = self.score()
+                self.assertEqual(row['features']['insufficient_funds'], 0)
+                self.assertEqual(row['valid_until'], '2026-10-19T15:14:24.001+00:00')
+                self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '14 minutes 25 seconds';")
+                row = self.score()
+                reason = next(r for r in row['reasons'] if r['key'] == 'insufficient_funds')
+                self.assertEqual(reason['params']['requiredAmount'], balance + 100)
+                self.assertGreater(row['valid_until'], '2026-10-19T15:14:25+00:00')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
