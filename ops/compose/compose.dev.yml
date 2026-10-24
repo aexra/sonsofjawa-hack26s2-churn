@@ -1,0 +1,7 @@
+services:
+  pg:
+    ports:
+      - "5432:5432"
+  api:
+    ports:
+      - "8081:8080"

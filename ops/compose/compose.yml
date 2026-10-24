@@ -1,0 +1,84 @@
+name: churn
+
+services:
+  pg:
+    image: ${BASE_REGISTRY:-docker.io}/library/postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-churn}
+      POSTGRES_USER: ${POSTGRES_USER:-churn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-churn}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    image: ${IMAGE_REGISTRY:-churn}/churn-api:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      args:
+        BASE_REGISTRY: ${BASE_REGISTRY:-docker.io}
+        GRADLE_MIRROR: ${GRADLE_MIRROR:-}
+    env_file:
+      - path: ../../.env
+        required: false
+    depends_on:
+      pg:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && grep -q '"status":"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  web:
+    image: ${IMAGE_REGISTRY:-churn}/churn-web:${IMAGE_TAG:-local}
+    build:
+      context: ../../apps/web
+      args:
+        BASE_REGISTRY: ${BASE_REGISTRY:-docker.io}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    env_file:
+      - path: ../../.env
+        required: false
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  seed:
+    image: ${BASE_REGISTRY:-docker.io}/library/postgres:18-alpine
+    restart: "no"
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PGHOST: pg
+      PGDATABASE: ${POSTGRES_DB:-churn}
+      PGUSER: ${POSTGRES_USER:-churn}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-churn}
+      DEMO_SEED: ${DEMO_SEED:-demo}
+      DEMO_CLOCK: ${DEMO_CLOCK:-shifted}
+      DEMO_AS_OF: ${DEMO_AS_OF:-2026-10-19T15:00:00Z}
+    volumes:
+      - ../scripts:/scripts:ro
+      - ../seeds:/seeds:ro
+    entrypoint: ["sh", "/scripts/seed.sh"]
+
+volumes:
+  pgdata:
