@@ -101,8 +101,4 @@ class PostgresFixture(unittest.TestCase):
         return next(row for row in self.scores() if row['account_id'] == 101)
 
     def persist_scores(self):
-        columns = ('account_id, calculated_at, as_of, model_version, status, no_score_reason, '
-                   'risk_score, risk_level, revenue_horizon, secured_amount, expected_loss, '
-                   'services_total, services_live, services_at_risk, next_expiry_at, '
-                   'reasons, features, anomalies, valid_until, is_current')
-        self.sql(f'INSERT INTO scores ({columns}) SELECT {columns} FROM scores_delta_vw;')
+        self.sql("BEGIN ISOLATION LEVEL REPEATABLE READ; SELECT * FROM recalculate_risk('manual'); COMMIT;")

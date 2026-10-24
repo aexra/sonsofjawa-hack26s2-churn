@@ -96,6 +96,28 @@ class PersistenceTest(PostgresFixture):
             self.recalculate('unknown')
         self.assertEqual(self.sql('SELECT count(*) FROM recalc_runs;'), '0')
 
+    def test_empty_feature_catalog_cannot_consume_pending_work(self):
+        self.account()
+        self.service()
+        self.sql('DELETE FROM model_features;')
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.recalculate()
+        self.assertEqual(self.sql('SELECT count(*) FROM scores;'), '0')
+        self.assertEqual(self.sql('SELECT count(DISTINCT account_id) FROM delta WHERE proc_date IS NULL;'), '1')
+
+    def test_incomplete_feature_definition_cannot_consume_pending_work(self):
+        self.account()
+        self.service()
+        self.sql("""INSERT INTO model_settings
+            (key,group_key,value,default_value,min_value,max_value,unit,title,description,sort_order)
+            VALUES ('weight_extra','weights',5,5,0,100,'points','extra','extra',900);
+            INSERT INTO model_features (key,weight_key,title,description,reason_template,sort_order)
+            VALUES ('extra','weight_extra','extra','extra','extra',900);""")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.recalculate()
+        self.assertEqual(self.sql('SELECT count(*) FROM scores;'), '0')
+        self.assertEqual(self.sql('SELECT count(DISTINCT account_id) FROM delta WHERE proc_date IS NULL;'), '1')
+
     def start_sql(self, statement):
         process = subprocess.Popen([
             'docker','exec','-i',self.container,'psql','-X','-qAt','-v','ON_ERROR_STOP=1',
