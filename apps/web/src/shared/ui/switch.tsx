@@ -6,10 +6,11 @@ interface SwitchProps {
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
   label: string;
+  hideLabel?: boolean;
   disabled?: boolean;
 }
 
-export function Switch({ label, ...props }: SwitchProps) {
+export function Switch({ label, hideLabel = false, ...props }: SwitchProps) {
   const id = useId();
   return (
     <span className="inline-flex items-center gap-2">
@@ -20,7 +21,7 @@ export function Switch({ label, ...props }: SwitchProps) {
       >
         <SwitchPrimitive.Thumb className="block size-3.5 translate-x-0.5 rounded-full bg-ink-muted transition-transform duration-120 ease-out data-[state=checked]:translate-x-4 data-[state=checked]:bg-on-accent" />
       </SwitchPrimitive.Root>
-      <label htmlFor={id} className="cursor-pointer text-body text-ink">
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'cursor-pointer text-body text-ink'}>
         {label}
       </label>
     </span>
