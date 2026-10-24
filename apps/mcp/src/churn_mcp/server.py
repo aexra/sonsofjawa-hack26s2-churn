@@ -1,5 +1,3 @@
-from typing import Any
-
 import uvicorn
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -8,8 +6,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from churn_mcp.auth import AuthMiddleware
-from churn_mcp.client import ApiClient, ApiError
+from churn_mcp.client import ApiClient
 from churn_mcp.settings import Settings
+from churn_mcp.tools import register
 
 
 def build_mcp(client: ApiClient, settings: Settings) -> FastMCP:
@@ -22,18 +21,7 @@ def build_mcp(client: ApiClient, settings: Settings) -> FastMCP:
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 
-    @mcp.tool()
-    async def get_summary() -> dict[str, Any]:
-        """Aggregated churn risk summary: customer counts per risk level and the estimated
-        money at risk. Money amounts are integer eurocents."""
-        try:
-            result = await client.get("/api/v1/analytics/summary")
-        except ApiError as exc:
-            raise ValueError(str(exc)) from None
-        if not isinstance(result, dict):
-            raise ValueError("unexpected api response")
-        return result
-
+    register(mcp, client)
     return mcp
 
 

@@ -11,6 +11,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pyyaml>=6",
+    "types-pyyaml>=6",
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "respx>=0.21",
@@ -34,6 +36,7 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.mypy]
 strict = true
+mypy_path = ["src", "tests"]
 files = ["src", "tests"]
 
 [tool.pytest.ini_options]
