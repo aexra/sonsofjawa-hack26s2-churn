@@ -2,6 +2,8 @@ package team.jawa.churn.model;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -140,24 +142,27 @@ public class ModelSettingsService {
     }
 
     public Updated update(Map<String, BigDecimal> values, ClockChange clock, String actor) {
-        long before = snapshot().modelVersion();
+        Versions versions;
         try {
-            transaction.executeWithoutResult(status -> apply(values, clock, actor));
+            versions = transaction.execute(status -> apply(values, clock, actor));
         } catch (DataIntegrityViolationException e) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT, "validation_failed", "the model rejected the new values");
         }
         Snapshot snapshot = snapshot();
-        if (snapshot.modelVersion() > before) {
+        if (versions.after() > versions.before()) {
             String source = values != null && !values.isEmpty() ? "settings" : "clock";
-            events.publish("model.updated", Map.of("modelVersion", snapshot.modelVersion(), "source", source));
-            log.info("model updated: version={} source={} by={}", snapshot.modelVersion(), source, actor);
+            events.publish("model.updated", Map.of("modelVersion", versions.after(), "source", source));
+            log.info("model updated: version={} source={} by={}", versions.after(), source, actor);
         }
         return new Updated(snapshot, scheduler.requestNow("model"));
     }
 
-    private void apply(Map<String, BigDecimal> values, ClockChange clock, String actor) {
+    private record Versions(long before, long after) {}
+
+    private Versions apply(Map<String, BigDecimal> values, ClockChange clock, String actor) {
         List<Setting> current = lockSettings();
+        long before = currentVersion();
         if (values != null && !values.isEmpty()) {
             validate(values, current);
             jdbc.sql("SELECT public.set_risk_settings(CAST(:values AS jsonb), :actor)")
@@ -169,6 +174,13 @@ public class ModelSettingsService {
         if (clock != null) {
             applyClock(clock, actor);
         }
+        return new Versions(before, currentVersion());
+    }
+
+    private long currentVersion() {
+        return jdbc.sql("SELECT coalesce(max(version), 0) FROM public.model_revisions")
+                .query(Long.class)
+                .single();
     }
 
     private void validate(Map<String, BigDecimal> values, List<Setting> current) {
@@ -185,6 +197,10 @@ public class ModelSettingsService {
         current.forEach(setting -> merged.put(setting.key(), setting.value()));
         values.forEach((key, value) -> {
             Setting setting = byKey.get(key);
+            if (value == null) {
+                errors.add(error("values." + key, "required", "value must be a number"));
+                return;
+            }
             if (value.compareTo(setting.min()) < 0 || value.compareTo(setting.max()) > 0) {
                 errors.add(error(
                         "values." + key,
@@ -304,7 +320,7 @@ public class ModelSettingsService {
         return json.writeValueAsString(values);
     }
 
-    private static Setting mapSetting(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+    private static Setting mapSetting(ResultSet rs, int row) throws SQLException {
         return new Setting(
                 rs.getString("key"),
                 rs.getString("group_key"),

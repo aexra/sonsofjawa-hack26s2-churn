@@ -206,6 +206,19 @@ class ModelSettingsIT extends IntegrationTest {
     }
 
     @Test
+    void aNullValueIsAFieldErrorNotAServerError() throws Exception {
+        long before = version();
+
+        HttpResponse<String> response = patch(admin(), "{\"values\":{\"weight_prolong_wait\":null}}");
+
+        assertThat(response.statusCode()).isEqualTo(422);
+        assertThat(response.body())
+                .contains("\"field\":\"values.weight_prolong_wait\"")
+                .contains("\"code\":\"required\"");
+        assertThat(version()).isEqualTo(before);
+    }
+
+    @Test
     void relatedThresholdsCanBeChangedTogether() throws Exception {
         long before = version();
 
