@@ -1,0 +1,85 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  GIT_DEPTH: "1"
+  KANIKO_IMAGE: ${NEXUS_PULL_REGISTRY}/kaniko-project/executor:debug
+  IMAGE_API: ${NEXUS_PUSH_REGISTRY}/hack26s2/api:dev
+  IMAGE_APP: ${NEXUS_PUSH_REGISTRY}/hack26s2/app:dev
+
+.kaniko:
+  stage: build
+  image:
+    name: $KANIKO_IMAGE
+    entrypoint: [""]
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - printf '%s\n' "$DOCKER_AUTH_CONFIG" > /kaniko/.docker/config.json
+
+build-api:
+  extends: .kaniko
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/apps/api/Dockerfile"
+      --destination "${IMAGE_API}"
+      --snapshot-mode=redo
+      --build-arg "BASE_REGISTRY=${NEXUS_PULL_REGISTRY}"
+      --build-arg "GRADLE_MIRROR=${NEXUS_MAVEN_PUBLIC}"
+      --verbosity info
+
+build-app:
+  extends: .kaniko
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}/apps/web"
+      --dockerfile "${CI_PROJECT_DIR}/apps/web/Dockerfile"
+      --destination "${IMAGE_APP}"
+      --snapshot-mode=redo
+      --build-arg "BASE_REGISTRY=${NEXUS_PULL_REGISTRY}"
+      --build-arg "NPM_REGISTRY=${NEXUS_NPM_REGISTRY}"
+      --verbosity info
+
+deploy:
+  stage: deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+  needs:
+    - build-api
+    - build-app
+  script:
+    - set -eu
+    - test -f /churn/.env
+    - set -a && . /churn/.env && set +a
+    - cp "${CI_PROJECT_DIR}/ops/compose/compose.prod.yml" /churn/compose.prod.yml
+    - rm -rf /churn/seeds /churn/scripts
+    - cp -a "${CI_PROJECT_DIR}/ops/seeds" /churn/seeds
+    - cp -a "${CI_PROJECT_DIR}/ops/scripts" /churn/scripts
+    - docker compose -f /churn/compose.prod.yml --env-file /churn/.env pull
+    - docker compose -f /churn/compose.prod.yml --env-file /churn/.env up -d --pull always --wait
+    - |
+      accounts="$(docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" churn-pg \
+        psql -X -U "${POSTGRES_USER:-churn}" -d "${POSTGRES_DB:-churn}" -At -c 'SELECT count(*) FROM public.accounts' 2>/dev/null || echo 0)"
+      if [ "$accounts" = "0" ]; then
+        docker run --rm --network nginx \
+          -e PGHOST=churn-pg \
+          -e PGUSER="${POSTGRES_USER:-churn}" \
+          -e PGDATABASE="${POSTGRES_DB:-churn}" \
+          -e PGPASSWORD="${POSTGRES_PASSWORD}" \
+          -e DEMO_SEED="${DEMO_SEED:-demo}" \
+          -e DEMO_CLOCK="${DEMO_CLOCK:-shifted}" \
+          -e DEMO_AS_OF="${DEMO_AS_OF:-2026-10-19T15:00:00Z}" \
+          -v /churn/scripts:/scripts:ro \
+          -v /churn/seeds:/seeds:ro \
+          "${NEXUS_PULL_REGISTRY}/library/postgres:18-alpine" \
+          sh /scripts/seed.sh
+      else
+        echo "seed: accounts already present ($accounts), skip"
+      fi

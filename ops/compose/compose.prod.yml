@@ -1,0 +1,69 @@
+name: churn
+
+networks:
+  nginx:
+    external: true
+
+services:
+  pg:
+    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/library/postgres:18-alpine
+    container_name: churn-pg
+    restart: unless-stopped
+    networks:
+      - nginx
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-churn}
+      POSTGRES_USER: ${POSTGRES_USER:-churn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/api:dev
+    container_name: churn-api
+    restart: unless-stopped
+    networks:
+      - nginx
+    env_file:
+      - .env
+    depends_on:
+      pg:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && grep -q '"status":"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  web:
+    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/app:dev
+    container_name: churn-web
+    restart: unless-stopped
+    networks:
+      - nginx
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM:-http://churn-api:8080}
+      WEB_API_BASE_URL: ${WEB_API_BASE_URL:-/api/v1}
+      WEB_DOCS_URL: ${WEB_DOCS_URL:-/api/v1/docs}
+      WEB_GRAFANA_URL: ${WEB_GRAFANA_URL:-}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
