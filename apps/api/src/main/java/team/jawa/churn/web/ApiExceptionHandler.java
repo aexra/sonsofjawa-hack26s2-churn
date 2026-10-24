@@ -1,10 +1,12 @@
 package team.jawa.churn.web;
 
 import jakarta.validation.ConstraintViolationException;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 @RestControllerAdvice
@@ -36,16 +39,32 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     ResponseEntity<Object> handleConstraintViolation(ConstraintViolationException ex, WebRequest request) {
-        ProblemDetail body = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "invalid request parameters");
-        body.setProperty(
-                "errors",
-                ex.getConstraintViolations().stream()
-                        .map(violation -> Map.of(
-                                "code", "invalid_value",
-                                "field", fieldOf(violation.getPropertyPath().toString()),
-                                "message", String.valueOf(violation.getMessage())))
-                        .toList());
-        return handleExceptionInternal(ex, body, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+        List<Map<String, String>> errors = ex.getConstraintViolations().stream()
+                .map(violation -> {
+                    String field = fieldOf(violation.getPropertyPath().toString());
+                    return Map.of(
+                            "code", "invalid_value", "field", field, "message", String.valueOf(violation.getMessage()));
+                })
+                .toList();
+        String code = errors.stream()
+                .map(error -> parameterCode(error.get("field")))
+                .filter(candidate -> !"validation_failed".equals(candidate))
+                .findFirst()
+                .orElse("validation_failed");
+        return handleApi(new ApiException(HttpStatus.BAD_REQUEST, code, "invalid request parameters", errors), request);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleTypeMismatch(
+            TypeMismatchException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        String parameter = ex instanceof MethodArgumentTypeMismatchException mismatch ? mismatch.getName() : "";
+        return handleApi(
+                new ApiException(
+                        HttpStatus.BAD_REQUEST,
+                        parameterCode(parameter),
+                        "invalid value for parameter " + parameter,
+                        List.of(Map.of("code", "invalid_value", "field", parameter, "message", "invalid value"))),
+                request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -93,9 +112,20 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return response;
     }
 
+    private static String parameterCode(String parameter) {
+        return switch (parameter) {
+            case "sort" -> "invalid_sort";
+            case "fields" -> "invalid_field";
+            case "level", "status", "q", "minScore", "maxScore", "minLoss", "hasAnomalies" -> "invalid_filter";
+            default -> "validation_failed";
+        };
+    }
+
     private static String fieldOf(String path) {
-        int dot = path.lastIndexOf('.');
-        return dot < 0 ? path : path.substring(dot + 1);
+        String[] parts = path.split("\\.");
+        String name = parts.length > 1 ? parts[1] : parts[0];
+        int bracket = name.indexOf('[');
+        return bracket < 0 ? name : name.substring(0, bracket);
     }
 
     private static String codeOf(HttpStatusCode status) {

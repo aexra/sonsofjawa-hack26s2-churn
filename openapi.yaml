@@ -23,7 +23,9 @@ tags:
   - name: oidc
     description: sso login handled by the security filter chain (no generated interface)
   - name: customers
-    description: risk rating and customer details
+    description: risk rating and csv export
+  - name: customer-details
+    description: single customer card and score history
   - name: analytics
     description: summary and churn chart
   - name: model
@@ -195,7 +197,7 @@ paths:
 
   /api/v1/customers/{id}:
     get:
-      tags: [customers]
+      tags: [customer-details]
       operationId: getCustomer
       summary: detailed score, services, transactions, reasons
       parameters:
@@ -211,7 +213,7 @@ paths:
 
   /api/v1/customers/{id}/history:
     get:
-      tags: [customers]
+      tags: [customer-details]
       operationId: getCustomerHistory
       summary: score history of a customer
       parameters:
