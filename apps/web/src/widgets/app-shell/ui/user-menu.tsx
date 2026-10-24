@@ -45,7 +45,7 @@ export function UserMenu({ login, role, authProvider }: UserMenuProps) {
         >
           {login.charAt(0)}
         </span>
-        <span>
+        <span className="max-w-40 truncate sm:max-w-none">
           {login}
           {roleLabel && ` · ${roleLabel}`}
         </span>

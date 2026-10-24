@@ -4,6 +4,7 @@ import { Link, Outlet, useMatches } from 'react-router';
 import { useSession } from '@/entities/session';
 import { ru } from '@/shared/i18n/ru';
 
+import { MobileNav } from './mobile-nav';
 import { ModelClock } from './model-clock';
 import { Sidebar } from './sidebar';
 import { UserMenu } from './user-menu';
@@ -66,7 +67,8 @@ function AppShellFrame({ headerStatus, heading }: AppShellFrameProps) {
   }, [pageTitle]);
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="flex min-h-screen flex-col overflow-x-clip md:flex-row">
+      <MobileNav isAdmin={isAdmin} />
       <Sidebar isAdmin={isAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-header flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-canvas px-4 py-3 md:px-8">
@@ -89,14 +91,14 @@ function AppShellFrame({ headerStatus, heading }: AppShellFrameProps) {
             </h1>
           </div>
           <ModelClock />
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             {headerStatus}
             {user && (
               <UserMenu login={user.login} role={user.role} authProvider={user.authProvider} />
             )}
           </div>
         </header>
-        <main className="mx-auto box-border flex w-full max-w-content-max min-w-0 flex-1 flex-col gap-6 p-4 md:px-8 md:pt-7 md:pb-12">
+        <main className="mx-auto box-border flex w-full max-w-content-max min-w-0 flex-1 flex-col gap-6 overflow-x-clip p-4 md:px-8 md:pt-7 md:pb-12">
           <Outlet />
         </main>
       </div>

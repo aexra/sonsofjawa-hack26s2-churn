@@ -9,6 +9,9 @@ export const ru = {
   },
   nav: {
     main: 'основная навигация',
+    menu: 'меню',
+    openMenu: 'открыть меню',
+    closeMenu: 'закрыть меню',
     overview: 'обзор',
     customers: 'клиенты',
     model: 'модель',

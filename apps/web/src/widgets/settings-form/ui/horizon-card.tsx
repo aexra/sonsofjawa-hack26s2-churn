@@ -16,7 +16,7 @@ export function HorizonCard({ settings, control, disabled }: HorizonCardProps) {
   return (
     <section
       aria-labelledby="model-horizon-title"
-      className="flex flex-col gap-3 rounded-md border border-line bg-surface p-5"
+      className="flex min-w-0 flex-col gap-3 rounded-md border border-line bg-surface p-5"
     >
       <h2 id="model-horizon-title" className="m-0 font-display text-heading">
         {ru.model.horizon.title}

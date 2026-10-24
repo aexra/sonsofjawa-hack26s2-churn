@@ -32,7 +32,7 @@ const dirtyText = (editor: SettingsEditor): string => {
 };
 
 const frame =
-  'sticky top-0 z-10 -mx-6 -mt-6 mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line bg-surface px-6 py-3';
+  'sticky top-0 z-10 -mx-4 -mt-4 mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line bg-surface px-4 py-3 md:-mx-8 md:-mt-7 md:mb-6 md:px-8';
 
 function VersionLine({ settings }: { settings: ModelSettings }) {
   return (
