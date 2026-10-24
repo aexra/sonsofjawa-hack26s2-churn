@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ import yaml
 from churn_mcp.client import ApiClient
 from churn_mcp.server import build_mcp
 from churn_mcp.settings import Settings
-from churn_mcp.tools import DEFAULT_PAGE_SIZE, ENDPOINTS, MAX_PAGE_SIZE
+from churn_mcp.tools import ARRAY_RESPONSES, DEFAULT_PAGE_SIZE, ENDPOINTS, MAX_PAGE_SIZE
 from support import API, KEY, MCP_HEADERS, rpc, with_http
 
 SPEC = yaml.safe_load((Path(__file__).resolve().parents[3] / "openapi.yaml").read_text())
@@ -34,7 +35,7 @@ def spec_params(path: str) -> dict[str, Any]:
 def schema_tools() -> dict[str, Any]:
     settings = Settings(churn_api_url=API)
     mcp = build_mcp(ApiClient(settings), settings)
-    return {tool.name: tool for tool in mcp._tool_manager.list_tools()}
+    return {tool.name: tool for tool in asyncio.run(mcp.list_tools())}
 
 
 async def call(
@@ -63,9 +64,12 @@ def test_endpoint_matches_openapi(name: str) -> None:
     declared = spec_params(endpoint.path)
     for api_name in endpoint.query.values():
         assert api_name in declared, api_name
+    ok = SPEC["paths"][endpoint.path]["get"]["responses"]["200"]["content"]["application/json"]
+    top = resolve(ok["schema"]).get("type", "object")
+    assert top == ("array" if name in ARRAY_RESPONSES else "object")
     query_declared = {key for key, value in declared.items() if value["in"] == "query"}
     assert set(endpoint.query.values()) == query_declared
-    properties = schema_tools()[name].parameters["properties"]
+    properties = schema_tools()[name].inputSchema["properties"]
     path_names = {key for key, value in declared.items() if value["in"] == "path"}
     assert set(properties) == set(endpoint.query) | path_names
 
@@ -74,7 +78,7 @@ def test_endpoint_matches_openapi(name: str) -> None:
 def test_parameter_bounds_match_openapi(name: str) -> None:
     endpoint = ENDPOINTS[name]
     declared = spec_params(endpoint.path)
-    properties = schema_tools()[name].parameters["properties"]
+    properties = schema_tools()[name].inputSchema["properties"]
     mapping = {**endpoint.query, "id": "id"}
     for tool_name, api_name in mapping.items():
         if api_name not in declared:
@@ -97,7 +101,7 @@ def test_page_size_limits() -> None:
 
 
 def test_enums_match_openapi() -> None:
-    properties = schema_tools()["get_customers"].parameters["properties"]
+    properties = schema_tools()["get_customers"].inputSchema["properties"]
     fields = SPEC["components"]["schemas"]["CustomerField"]["enum"]
     assert properties["fields"]["anyOf"][0]["items"]["enum"] == fields
     levels = SPEC["components"]["schemas"]["RiskLevel"]["enum"]
@@ -153,7 +157,7 @@ async def test_customers_params_reach_api(http: httpx.AsyncClient) -> None:
     assert params["page"] == "1"
     assert params["size"] == "10"
     assert params["q"] == "ann"
-    assert params["minScore"] == "40.0" or params["minScore"] == "40"
+    assert params["minScore"] == "40.0"
     assert params["minLoss"] == "5000"
     assert params["hasAnomalies"] == "true"
     assert route.calls.last.request.headers["authorization"] == KEY
@@ -247,9 +251,9 @@ async def test_bad_request_is_short_text(http: httpx.AsyncClient) -> None:
 @with_http
 async def test_history_params(http: httpx.AsyncClient) -> None:
     route = respx.get(f"{API}/api/v1/customers/5/history").mock(
-        return_value=httpx.Response(200, json={"points": []})
+        return_value=httpx.Response(200, json=[{"calculatedAt": "2026-01-01T00:00:00Z"}])
     )
-    await call(
+    result = await call(
         http,
         "get_customer_history",
         {"id": 5, "date_from": "2026-01-01T00:00:00Z", "limit": 50},
@@ -258,6 +262,7 @@ async def test_history_params(http: httpx.AsyncClient) -> None:
     assert params["from"] == "2026-01-01T00:00:00Z"
     assert params["limit"] == "50"
     assert "to" not in params
+    assert result["structuredContent"] == {"points": [{"calculatedAt": "2026-01-01T00:00:00Z"}]}
 
 
 @respx.mock
@@ -304,3 +309,4 @@ async def test_forbidden_scope_has_clear_text(http: httpx.AsyncClient) -> None:
     )
     assert response.status_code == 403
     assert "forbidden" in response.text
+    assert "scope read is not enough" in response.text

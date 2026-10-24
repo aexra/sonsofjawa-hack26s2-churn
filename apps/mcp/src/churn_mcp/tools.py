@@ -55,6 +55,8 @@ class Endpoint:
     query: dict[str, str]
 
 
+ARRAY_RESPONSES = frozenset({"get_customer_history"})
+
 ENDPOINTS: dict[str, Endpoint] = {
     "get_customers": Endpoint(
         "/api/v1/customers",
@@ -127,7 +129,7 @@ def register(mcp: FastMCP, client: ApiClient) -> None:
             int, Field(ge=1, le=MAX_PAGE_SIZE, description="items per page")
         ] = DEFAULT_PAGE_SIZE,
         sort: Annotated[
-            list[str] | None,
+            list[Annotated[str, Field(pattern=r"^[a-zA-Z]+,(asc|desc)$")]] | None,
             Field(
                 description=(
                     "sort rules as '<field>,<asc|desc>', for example 'riskScore,desc' "
@@ -203,9 +205,13 @@ def register(mcp: FastMCP, client: ApiClient) -> None:
         ] = None,
         limit: Annotated[int, Field(ge=1, le=5000, description="maximum points")] = 1000,
     ) -> dict[str, Any]:
-        """Risk score history of one customer over time. Money amounts are integer eurocents."""
+        """Risk score history of one customer over time, returned as points.
+        Money amounts are integer eurocents."""
         values = {"date_from": date_from, "date_to": date_to, "limit": limit}
-        return _object(await _get(client, "get_customer_history", values, id=id))
+        points = await _get(client, "get_customer_history", values, id=id)
+        if not isinstance(points, list):
+            raise ValueError("unexpected api response")
+        return {"points": points}
 
     @mcp.tool()
     async def get_summary() -> dict[str, Any]:
