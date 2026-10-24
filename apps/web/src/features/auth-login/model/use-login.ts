@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { sessionQueryOptions } from '@/entities/session';
+import { startSession } from '@/entities/session';
 import { apiClient, unwrap } from '@/shared/api/client';
 
 import type { components } from '@/shared/api/schema';
@@ -11,7 +11,7 @@ export function useLogin() {
     mutationFn: (body: components['schemas']['LoginRequest']) =>
       unwrap(apiClient.POST('/api/v1/auth/login', { body })),
     onSuccess: (user) => {
-      queryClient.setQueryData(sessionQueryOptions.queryKey, user);
+      startSession(queryClient, user);
     },
   });
 }

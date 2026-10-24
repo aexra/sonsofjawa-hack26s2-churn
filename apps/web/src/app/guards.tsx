@@ -8,7 +8,7 @@ import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
 
 export function RequireAuth() {
-  const { user, isPending, isError, refetch } = useSession();
+  const { user, isPending, isError, refetch, expired } = useSession();
   const location = useLocation();
 
   if (isPending) {
@@ -31,7 +31,8 @@ export function RequireAuth() {
   }
   if (!user) {
     const next = `${location.pathname}${location.search}`;
-    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
+    const query = `${expired ? 'expired=1&' : ''}next=${encodeURIComponent(next)}`;
+    return <Navigate to={`/login?${query}`} replace />;
   }
   return <Outlet />;
 }
