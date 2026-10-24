@@ -1309,6 +1309,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            422: components["responses"]["Unprocessable"];
         };
     };
     refresh: {
