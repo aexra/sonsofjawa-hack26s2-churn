@@ -24,12 +24,7 @@ case "$DEMO_SEED" in
         file=/seeds/tmplt/002_seed.sql
         ;;
     demo)
-        if [ -f /seeds/demo/002_seed.sql ]; then
-            file=/seeds/demo/002_seed.sql
-        else
-            echo "seed: demo set not found, loading tmplt" >&2
-            file=/seeds/tmplt/002_seed.sql
-        fi
+        file=/seeds/demo/002_seed.sql
         ;;
     *)
         echo "seed: unknown DEMO_SEED=$DEMO_SEED (expected demo, tmplt or none)" >&2
