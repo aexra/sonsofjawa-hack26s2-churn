@@ -25,6 +25,7 @@ export const ru = {
     themeLight: 'светлая',
     themeDark: 'тёмная',
     logout: 'выйти',
+    authMethod: (method: string) => `способ входа: ${method}`,
   },
   roles: {
     admin: 'администратор',
@@ -52,6 +53,11 @@ export const ru = {
     submitting: 'вход…',
     footnote: 'доступ выдаёт администратор панели',
     localDisabled: 'вход по паролю отключён',
+    or: 'или',
+    ssoName: 'SSO',
+    ssoSubmit: (name: string) => `войти через ${name}`,
+    forbiddenHint: (name: string) =>
+      `попросите администратора выдать роль в ${name} или войдите другой учётной записью.`,
     sessionExpired: 'сессия истекла, войдите снова',
     loginRequired: 'укажите логин',
     passwordRequired: 'укажите пароль',

@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
+import { type CurrentUser } from '@/entities/session';
 import { useLogout } from '@/features/auth-logout';
 import { ru } from '@/shared/i18n/ru';
 import { applyTheme, getStoredTheme, type ThemeMode } from '@/shared/lib/theme';
@@ -24,9 +25,10 @@ const THEMES: { value: ThemeMode; label: string }[] = [
 interface UserMenuProps {
   login: string;
   role: 'admin' | 'user' | undefined;
+  authProvider: CurrentUser['authProvider'];
 }
 
-export function UserMenu({ login, role }: UserMenuProps) {
+export function UserMenu({ login, role, authProvider }: UserMenuProps) {
   const [theme, setTheme] = useState<ThemeMode>(getStoredTheme);
   const { mutate: logout } = useLogout();
   const roleLabel = role ? ru.roles[role] : undefined;
@@ -44,6 +46,12 @@ export function UserMenu({ login, role }: UserMenuProps) {
         <ChevronDown aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent>
+        <DropdownMenuLabel>
+          {ru.header.authMethod(
+            authProvider === 'oidc' ? ru.access.users.methodSso : ru.access.users.methodLocal,
+          )}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
         <DropdownMenuLabel>{ru.header.theme}</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={theme}

@@ -1,11 +1,17 @@
 import { Navigate, Outlet, useLocation } from 'react-router';
 
 import { useSession } from '@/entities/session';
+import { useResumeAfterSso } from '@/features/auth-login';
 import { ForbiddenPage } from '@/pages/forbidden';
 import { ru } from '@/shared/i18n/ru';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
+
+function ResumeAfterSso() {
+  useResumeAfterSso();
+  return null;
+}
 
 export function RequireAuth() {
   const { user, isPending, isError, refetch, expired } = useSession();
@@ -34,7 +40,12 @@ export function RequireAuth() {
     const query = `${expired ? 'expired=1&' : ''}next=${encodeURIComponent(next)}`;
     return <Navigate to={`/login?${query}`} replace />;
   }
-  return <Outlet />;
+  return (
+    <>
+      <ResumeAfterSso />
+      <Outlet />
+    </>
+  );
 }
 
 export function RequireAdmin() {

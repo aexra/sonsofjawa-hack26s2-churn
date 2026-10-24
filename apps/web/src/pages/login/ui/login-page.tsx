@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 
 import { useSession } from '@/entities/session';
-import { LoginForm, useAuthProviders } from '@/features/auth-login';
+import { LoginForm, SsoButton, useAuthProviders } from '@/features/auth-login';
 import { ru } from '@/shared/i18n/ru';
 import { safeNextPath } from '@/shared/lib/redirect';
 import { Button } from '@/shared/ui/button';
@@ -44,6 +44,7 @@ export function LoginPage() {
   const { user } = useSession();
   const providers = useAuthProviders();
   const next = safeNextPath(params.get('next'));
+  const rememberedNext = params.has('next') ? next : null;
   const ssoError = SSO_ERRORS[params.get('error') ?? ''];
   const expired = params.get('expired') === '1';
 
@@ -52,6 +53,13 @@ export function LoginPage() {
   }, []);
 
   if (user) return <Navigate to={next} replace />;
+
+  const oidc = providers.data?.oidc;
+  const sso =
+    oidc?.enabled && oidc.loginUrl ? { loginUrl: oidc.loginUrl, name: oidc.displayName } : null;
+  const localEnabled = providers.data?.local.enabled === true;
+  const forbidden = params.get('error') === 'forbidden';
+  const ssoLabel = sso?.name ?? ru.login.ssoName;
 
   return (
     <div className="box-border flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
@@ -84,7 +92,17 @@ export function LoginPage() {
               <Skeleton className="h-control-md" />
             </div>
           )}
-          {providers.data?.local.enabled && <LoginForm />}
+          {forbidden && sso && (
+            <p className="m-0 text-ink-muted">{ru.login.forbiddenHint(ssoLabel)}</p>
+          )}
+          {localEnabled && <LoginForm />}
+          {localEnabled && sso && (
+            <div aria-hidden="true" className="flex items-center gap-3 text-caption text-ink-muted">
+              <span className="h-px flex-1 bg-line" />
+              {ru.login.or}
+              <span className="h-px flex-1 bg-line" />
+            </div>
+          )}
           {providers.isError && (
             <EmptyState
               kind="error"
@@ -93,8 +111,16 @@ export function LoginPage() {
               action={<Button onClick={() => void providers.refetch()}>{ru.common.retry}</Button>}
             />
           )}
-          {providers.data?.local.enabled === false && (
+          {providers.data?.local.enabled === false && !(forbidden && sso) && (
             <p className="m-0 text-ink-muted">{ru.login.localDisabled}</p>
+          )}
+          {sso && (
+            <SsoButton
+              loginUrl={sso.loginUrl}
+              displayName={sso.name}
+              next={rememberedNext}
+              primary={!localEnabled && !forbidden}
+            />
           )}
         </div>
         <p className="m-0 text-center text-caption text-ink-muted">{ru.login.footnote}</p>
