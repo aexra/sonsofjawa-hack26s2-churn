@@ -15,6 +15,7 @@ import {
 } from '@/entities/customer';
 import { ApiError } from '@/shared/api/api-error';
 import { ru } from '@/shared/i18n/ru';
+import { useRowHighlight } from '@/shared/lib/use-row-highlight';
 import { Button } from '@/shared/ui/button';
 import { DataTable, type SortDirection } from '@/shared/ui/data-table';
 import { EmptyState } from '@/shared/ui/empty-state';
@@ -41,6 +42,11 @@ export function CustomersTable({ fields, onInvalidFields }: CustomersTableProps)
   const [params, update] = useCustomersListParams();
   const navigate = useNavigate();
   const customers = useCustomers(params, fields);
+  const isChanged = useRowHighlight({
+    rows: customers.data?.items,
+    rowKey: (row: CustomerRow) => String(row.id),
+    signature: (row) => `${String(row.riskScore)}:${String(row.expectedLoss)}`,
+  });
   const error = customers.error;
   const invalidFields = error instanceof ApiError && error.code === 'invalid_field';
 
@@ -126,6 +132,7 @@ export function CustomersTable({ fields, onInvalidFields }: CustomersTableProps)
           update({ sort: dir ? { field: key, dir } : null });
         }}
         onRowClick={open}
+        isChanged={isChanged}
         columns={visible.map((field, index) => ({
           key: field,
           label: ru.customers.fields[field],
