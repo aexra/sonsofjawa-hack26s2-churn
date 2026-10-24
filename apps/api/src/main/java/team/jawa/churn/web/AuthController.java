@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.RestController;
 import team.jawa.churn.api.generated.api.AuthApi;
+import team.jawa.churn.api.generated.model.ApiKeyScope;
 import team.jawa.churn.api.generated.model.AuthProvider;
 import team.jawa.churn.api.generated.model.AuthProviders;
 import team.jawa.churn.api.generated.model.AuthProvidersLocal;
@@ -16,6 +17,7 @@ import team.jawa.churn.api.generated.model.AuthProvidersOidc;
 import team.jawa.churn.api.generated.model.CurrentUser;
 import team.jawa.churn.api.generated.model.LoginRequest;
 import team.jawa.churn.api.generated.model.Role;
+import team.jawa.churn.auth.ApiKeyPrincipal;
 import team.jawa.churn.auth.AuthProperties;
 import team.jawa.churn.auth.AuthService;
 import team.jawa.churn.auth.AuthenticatedUser;
@@ -83,6 +85,10 @@ class AuthController implements AuthApi {
     @Override
     public ResponseEntity<CurrentUser> getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof ApiKeyPrincipal key) {
+            return ResponseEntity.ok(new CurrentUser(key.name(), AuthProvider.API_KEY)
+                    .scopes(key.scopes().stream().map(ApiKeyScope::fromValue).toList()));
+        }
         if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "unauthenticated", "authentication required");
         }

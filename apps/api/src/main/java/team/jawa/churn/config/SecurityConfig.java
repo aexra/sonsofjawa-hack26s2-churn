@@ -14,6 +14,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
@@ -22,6 +23,8 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
+import team.jawa.churn.auth.ApiKeyAuthenticationFilter;
+import team.jawa.churn.auth.ApiKeyService;
 import team.jawa.churn.auth.AuthProperties;
 import team.jawa.churn.auth.CookieService;
 import team.jawa.churn.auth.JwtCookieAuthenticationFilter;
@@ -38,7 +41,12 @@ class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(
-            HttpSecurity http, AuthProperties auth, JwtService jwt, CookieService cookies, ProblemWriter problems)
+            HttpSecurity http,
+            AuthProperties auth,
+            JwtService jwt,
+            CookieService cookies,
+            ApiKeyService apiKeys,
+            ProblemWriter problems)
             throws Exception {
         CookieCsrfTokenRepository csrfRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfRepository.setCookieCustomizer(cookie -> cookie.sameSite("Strict").secure(auth.cookieSecure()));
@@ -47,11 +55,13 @@ class SecurityConfig {
 
         return http.csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())
                         .ignoringRequestMatchers(
                                 hasAuthorizationHeader,
                                 paths.matcher(HttpMethod.POST, "/api/v1/auth/login"),
                                 paths.matcher(HttpMethod.POST, "/api/v1/auth/refresh")))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(new ApiKeyAuthenticationFilter(apiKeys, problems), BasicAuthenticationFilter.class)
                 .addFilterBefore(new JwtCookieAuthenticationFilter(jwt, cookies), BasicAuthenticationFilter.class)
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .authorizeHttpRequests(a -> a.requestMatchers(
@@ -74,10 +84,14 @@ class SecurityConfig {
                                 "/api/v1/swagger-ui/**",
                                 "/v3/api-docs/swagger-config",
                                 "/api/v1/openapi.yaml")
-                        .hasRole("USER")
+                        .hasAnyAuthority("ROLE_USER", "SCOPE_read")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/model/settings")
                         .hasRole("ADMIN")
-                        .requestMatchers("/api/v1/source/**", "/api/v1/recalc", "/api/v1/admin/**", "/metrics")
+                        .requestMatchers("/api/v1/source/**", "/api/v1/recalc")
+                        .hasAnyAuthority("ROLE_ADMIN", "SCOPE_ingest")
+                        .requestMatchers("/metrics")
+                        .hasAnyAuthority("ROLE_ADMIN", "SCOPE_metrics")
+                        .requestMatchers("/api/v1/admin/**")
                         .hasRole("ADMIN")
                         .anyRequest()
                         .denyAll())

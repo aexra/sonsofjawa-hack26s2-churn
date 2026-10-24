@@ -71,6 +71,23 @@ public abstract class IntegrationTest {
                     .build());
         }
 
+        public HttpResponse<String> exchange(
+                String method, String path, String json, java.util.Map<String, String> headers, boolean withCsrf)
+                throws IOException, InterruptedException {
+            HttpRequest.Builder builder = request(path);
+            headers.forEach(builder::header);
+            if (json != null) {
+                builder.header("Content-Type", "application/json");
+            }
+            if (withCsrf) {
+                cookie("XSRF-TOKEN").ifPresent(token -> builder.header("X-XSRF-TOKEN", token));
+            }
+            builder.method(
+                    method,
+                    json == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(json));
+            return send(builder.build());
+        }
+
         public java.util.Optional<String> cookie(String name) {
             return cookies.getCookieStore().getCookies().stream()
                     .filter(c -> c.getName().equals(name))

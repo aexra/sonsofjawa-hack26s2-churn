@@ -34,8 +34,10 @@ tags:
     description: data ingestion (hand-written controller - multiple body formats)
   - name: events
     description: server-sent events (hand-written controller)
-  - name: admin
-    description: users and bot api keys
+  - name: users
+    description: user administration
+  - name: api-keys
+    description: bot api keys
   - name: system
     description: actuator endpoints (not generated)
 
@@ -80,6 +82,7 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   /api/v1/auth/refresh:
     post:
@@ -528,7 +531,7 @@ paths:
 
   /api/v1/admin/users:
     get:
-      tags: [admin]
+      tags: [users]
       operationId: listUsers
       summary: all users
       responses:
@@ -542,7 +545,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
-      tags: [admin]
+      tags: [users]
       operationId: createUser
       summary: create local user
       requestBody:
@@ -564,7 +567,7 @@ paths:
 
   /api/v1/admin/users/{id}:
     patch:
-      tags: [admin]
+      tags: [users]
       operationId: updateUser
       summary: change role, enabled flag, display name or password (local users)
       parameters:
@@ -586,7 +589,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
     delete:
-      tags: [admin]
+      tags: [users]
       operationId: deleteUser
       summary: delete user (not self, not last admin)
       parameters:
@@ -600,7 +603,7 @@ paths:
 
   /api/v1/admin/api-keys:
     get:
-      tags: [admin]
+      tags: [api-keys]
       operationId: listApiKeys
       summary: bot api keys (secrets are never returned)
       responses:
@@ -614,7 +617,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
-      tags: [admin]
+      tags: [api-keys]
       operationId: createApiKey
       summary: issue a key; the secret is shown once
       requestBody:
@@ -634,7 +637,7 @@ paths:
 
   /api/v1/admin/api-keys/{id}:
     delete:
-      tags: [admin]
+      tags: [api-keys]
       operationId: revokeApiKey
       summary: revoke key
       parameters:
