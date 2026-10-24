@@ -1,6 +1,44 @@
+import { useSession } from '@/entities/session';
+import { useModelSettings } from '@/features/model-settings-edit';
 import { ru } from '@/shared/i18n/ru';
+import { formatDateTime } from '@/shared/lib/format';
+import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
+import { Skeleton } from '@/shared/ui/skeleton';
+import { RevisionsTable } from '@/widgets/model-revisions';
+import { SettingsForm } from '@/widgets/settings-form';
 
 export function ModelPage() {
-  return <EmptyState kind="empty" title={ru.stub.title} text={ru.stub.text} />;
+  const { isAdmin } = useSession();
+  const { data, isPending, isError, refetch } = useModelSettings();
+
+  if (isPending) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-8 w-80" />
+        <Skeleton className="h-96" />
+      </div>
+    );
+  }
+  if (isError) {
+    return (
+      <EmptyState
+        kind="error"
+        title={ru.model.loadFailed}
+        text={ru.common.loadFailedText}
+        action={<Button onClick={() => void refetch()}>{ru.common.retry}</Button>}
+      />
+    );
+  }
+  const changedBy = data.updatedBy ?? ru.common.emptyValue;
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="m-0 -mt-2 text-caption text-ink-muted">
+        {ru.model.version(data.modelVersion)}
+        {data.updatedAt && ` · ${ru.model.changedAt(formatDateTime(data.updatedAt), changedBy)}`}
+      </p>
+      <SettingsForm settings={data} canEdit={isAdmin} />
+      <RevisionsTable settings={data} />
+    </div>
+  );
 }
