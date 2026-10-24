@@ -83,9 +83,7 @@ public class SnapshotService {
     public Outcome replaceJson(byte[] body, Actor actor) {
         int[] received = {0};
         try {
-            Outcome outcome = applyJson(body, actor, received);
-            publish(actor, outcome);
-            return outcome;
+            return applyJson(body, actor, received);
         } catch (ApiException e) {
             reject(IngestFormat.JSON, actor, received[0], e);
             throw e;
@@ -95,9 +93,7 @@ public class SnapshotService {
     public Outcome replaceCsv(byte[] accounts, byte[] services, byte[] transactions, Actor actor) {
         int[] received = {0};
         try {
-            Outcome outcome = applyCsv(accounts, services, transactions, actor, received);
-            publish(actor, outcome);
-            return outcome;
+            return applyCsv(accounts, services, transactions, actor, received);
         } catch (ApiException e) {
             reject(IngestFormat.CSV, actor, received[0], e);
             throw e;
@@ -150,12 +146,20 @@ public class SnapshotService {
         if (!errors.isEmpty()) {
             throw rejected("input rejected: " + errors.size() + " error(s)", errors);
         }
+        int accounts = validated.get(0).rows().size();
+        int services = validated.get(1).rows().size();
+        int transactions = validated.get(2).rows().size();
+        int applied = accounts + services + transactions;
+        long[] logId = {0};
         try {
             transaction.executeWithoutResult(status -> {
                 template.execute("TRUNCATE public.transactions, public.services, public.accounts");
                 writer.write(SourceEntity.ACCOUNTS, validated.get(0).rows());
                 writer.write(SourceEntity.SERVICES, validated.get(1).rows());
                 writer.write(SourceEntity.TRANSACTIONS, validated.get(2).rows());
+                logId[0] = journal.insert(actor, SNAPSHOT, SNAPSHOT, format, received[0], applied, List.of());
+                events.publish(
+                        "ingest.completed", Map.of("entity", SNAPSHOT, "mode", SNAPSHOT, "rowsApplied", applied));
             });
         } catch (DataIntegrityViolationException e) {
             log.warn(
@@ -166,27 +170,8 @@ public class SnapshotService {
                     List.of(new IngestError(
                             null, null, null, "constraint_violation", "a database constraint was violated")));
         }
-        int accounts = validated.get(0).rows().size();
-        int services = validated.get(1).rows().size();
-        int transactions = validated.get(2).rows().size();
-        int applied = accounts + services + transactions;
         RecalcScheduler.State state = scheduler.requestNow(SNAPSHOT);
-        long logId = journal.insert(actor, SNAPSHOT, SNAPSHOT, format, received[0], applied, List.of());
-        return new Outcome(logId, format, received[0], applied, accounts, services, transactions, state);
-    }
-
-    private void publish(Actor actor, Outcome outcome) {
-        events.publish(
-                "ingest.completed",
-                Map.of(
-                        "source",
-                        actor.channel(),
-                        "entity",
-                        SNAPSHOT,
-                        "mode",
-                        SNAPSHOT,
-                        "rowsApplied",
-                        outcome.rowsApplied()));
+        return new Outcome(logId[0], format, received[0], applied, accounts, services, transactions, state);
     }
 
     private void reject(IngestFormat format, Actor actor, int received, ApiException e) {

@@ -65,14 +65,16 @@ class RecalcApiIT extends IntegrationTest {
         RecalcSupport.loadReferenceData(jdbc);
         post(login("admin", "admin12345"), "/api/v1/recalc");
         await().atMost(Duration.ofSeconds(20))
-                .until(() -> jdbc.queryForObject("select count(*) from recalc_runs", Integer.class) == 1);
+                .until(() -> jdbc.queryForObject("select count(*) from recalc_runs where status = 'ok'", Integer.class)
+                        == 1);
         await().atMost(Duration.ofSeconds(10)).until(() -> !scheduler.isRunning());
 
         HttpResponse<String> response = post(login("admin", "admin12345"), "/api/v1/recalc?scope=all");
 
         assertThat(response.statusCode()).isEqualTo(202);
         await().atMost(Duration.ofSeconds(20))
-                .until(() -> jdbc.queryForObject("select count(*) from recalc_runs", Integer.class) == 2);
+                .until(() -> jdbc.queryForObject("select count(*) from recalc_runs where status = 'ok'", Integer.class)
+                        == 2);
         assertThat(jdbc.queryForObject("select max(accounts_processed) from recalc_runs", Integer.class))
                 .isEqualTo(10);
     }
@@ -117,7 +119,8 @@ class RecalcApiIT extends IntegrationTest {
 
         post(admin, "/api/v1/recalc");
         await().atMost(Duration.ofSeconds(20))
-                .until(() -> jdbc.queryForObject("select count(*) from recalc_runs", Integer.class) == 1);
+                .until(() -> jdbc.queryForObject("select count(*) from recalc_runs where status = 'ok'", Integer.class)
+                        == 1);
 
         String status = admin.get("/api/v1/recalc/status").body();
         assertThat(status)

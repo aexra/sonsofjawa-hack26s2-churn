@@ -81,15 +81,7 @@ public class IngestService {
     public Outcome upsert(SourceEntity entity, IngestFormat format, byte[] body, Actor actor) {
         int[] received = {0};
         try {
-            Outcome outcome = apply(entity, format, body, actor, received);
-            events.publish(
-                    "ingest.completed",
-                    Map.of(
-                            "source", actor.channel(),
-                            "entity", entity.path(),
-                            "mode", "upsert",
-                            "rowsApplied", outcome.rowsApplied()));
-            return outcome;
+            return apply(entity, format, body, actor, received);
         } catch (ApiException e) {
             reject(entity, format, actor, received[0], e);
             throw e;
@@ -126,6 +118,8 @@ public class IngestService {
             transaction.executeWithoutResult(status -> {
                 int applied = writer.write(entity, validated.rows());
                 logId[0] = journal.insert(actor, entity, format, rows.size(), applied, List.of());
+                events.publish(
+                        "ingest.completed", Map.of("entity", entity.path(), "mode", "upsert", "rowsApplied", applied));
             });
         } catch (DataIntegrityViolationException e) {
             log.warn(

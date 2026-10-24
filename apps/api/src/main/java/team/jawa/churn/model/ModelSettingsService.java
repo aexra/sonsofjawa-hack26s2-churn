@@ -144,7 +144,14 @@ public class ModelSettingsService {
     public Updated update(Map<String, BigDecimal> values, ClockChange clock, String actor) {
         Versions versions;
         try {
-            versions = transaction.execute(status -> apply(values, clock, actor));
+            versions = transaction.execute(status -> {
+                Versions applied = apply(values, clock, actor);
+                if (applied.after() > applied.before()) {
+                    String source = values != null && !values.isEmpty() ? "settings" : "clock";
+                    events.publish("model.updated", Map.of("modelVersion", applied.after(), "source", source));
+                }
+                return applied;
+            });
         } catch (DataIntegrityViolationException e) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT, "validation_failed", "the model rejected the new values");
@@ -152,7 +159,6 @@ public class ModelSettingsService {
         Snapshot snapshot = snapshot();
         if (versions.after() > versions.before()) {
             String source = values != null && !values.isEmpty() ? "settings" : "clock";
-            events.publish("model.updated", Map.of("modelVersion", versions.after(), "source", source));
             log.info("model updated: version={} source={} by={}", versions.after(), source, actor);
         }
         return new Updated(snapshot, scheduler.requestNow("model"));

@@ -113,7 +113,7 @@ class SourceSnapshotIT extends IntegrationTest {
         assertThat(event.get("entity").asString()).isEqualTo("snapshot");
         assertThat(event.get("mode").asString()).isEqualTo("snapshot");
         assertThat(event.get("rowsApplied").asInt()).isEqualTo(140);
-        assertThat(event.get("source").asString()).isEqualTo("api");
+        assertThat(event.get("source")).isNull();
     }
 
     @Test

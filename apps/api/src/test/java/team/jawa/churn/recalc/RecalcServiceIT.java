@@ -171,7 +171,9 @@ class RecalcServiceIT extends IntegrationTest {
             List<String> received = events.collect(500);
 
             assertThat(received).hasSize(2);
-            assertThat(received.get(0)).contains("\"type\":\"recalc.started\"", "\"trigger\":\"manual\"");
+            assertThat(received.get(0))
+                    .contains("\"type\":\"recalc.started\"", "\"trigger\":\"manual\"")
+                    .containsPattern("\"runId\":\\d+");
             assertThat(received.get(1).replace(" ", ""))
                     .contains("\"type\":\"recalc.completed\"", "\"trigger\":\"manual\"")
                     .contains("\"runId\":", "\"accountsProcessed\":10", "\"modelVersion\":")

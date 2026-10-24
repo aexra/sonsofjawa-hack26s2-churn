@@ -135,9 +135,10 @@ class SourceIngestIT extends IntegrationTest {
         assertThat(jdbc.queryForObject("select status from services where id = 26", String.class))
                 .isEqualTo("prolong_wait");
         await().atMost(Duration.ofSeconds(5))
-                .until(() ->
-                        jdbc.queryForObject("select count(*) from recalc_runs where trigger = 'ingest'", Integer.class)
-                                > 0);
+                .until(() -> jdbc.queryForObject(
+                                "select count(*) from recalc_runs where trigger = 'ingest' and status = 'ok'",
+                                Integer.class)
+                        > 0);
         awaitIdle();
         BigDecimal after = jdbc.queryForObject(
                 "select risk_score from scores where account_id = 6 and is_current", BigDecimal.class);
@@ -543,7 +544,7 @@ class SourceIngestIT extends IntegrationTest {
             assertThat(event.get("entity").asString()).isEqualTo("accounts");
             assertThat(event.get("mode").asString()).isEqualTo("upsert");
             assertThat(event.get("rowsApplied").asInt()).isEqualTo(1);
-            assertThat(event.get("source").asString()).isEqualTo("api");
+            assertThat(event.get("source")).isNull();
         }
     }
 

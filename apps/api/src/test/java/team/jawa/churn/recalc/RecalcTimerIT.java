@@ -44,9 +44,10 @@ class RecalcTimerIT extends IntegrationTest {
         jdbc.update("update services set price = price + 1 where id = 26");
 
         await().atMost(Duration.ofSeconds(20))
-                .until(() -> jdbc.queryForObject("select count(*) from recalc_runs", Integer.class) >= 2);
-        assertThat(jdbc.queryForObject(
-                        "select count(*) from scores where account_id = 6 and not is_current", Integer.class))
-                .isEqualTo(1);
+                .until(() -> jdbc.queryForObject(
+                                "select count(*) from scores where account_id = 6 and not is_current", Integer.class)
+                        == 1);
+        assertThat(jdbc.queryForObject("select count(*) from recalc_runs where status = 'ok'", Integer.class))
+                .isGreaterThanOrEqualTo(2);
     }
 }

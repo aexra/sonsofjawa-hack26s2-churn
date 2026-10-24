@@ -12,7 +12,10 @@ import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.filter.OncePerRequestFilter;
 import team.jawa.churn.web.ProblemWriter;
 
@@ -20,6 +23,8 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER = "Bearer ";
     private static final String BASIC = "Basic ";
+
+    private static final SecurityContextRepository CONTEXTS = new RequestAttributeSecurityContextRepository();
 
     private final ApiKeyService keys;
     private final ProblemWriter problems;
@@ -45,9 +50,11 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         List<SimpleGrantedAuthority> authorities = principal.get().scopes().stream()
                 .map(scope -> new SimpleGrantedAuthority("SCOPE_" + scope))
                 .toList();
-        SecurityContextHolder.getContext()
-                .setAuthentication(
-                        UsernamePasswordAuthenticationToken.authenticated(principal.get(), null, authorities));
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(principal.get(), null, authorities));
+        SecurityContextHolder.setContext(context);
+        CONTEXTS.saveContext(context, request, response);
         chain.doFilter(request, response);
     }
 

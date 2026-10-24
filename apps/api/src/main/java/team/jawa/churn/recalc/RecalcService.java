@@ -2,7 +2,6 @@ package team.jawa.churn.recalc;
 
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,17 +59,22 @@ public class RecalcService {
         if (!hasWork() || runningElsewhere()) {
             return new Outcome(Result.SKIPPED, 0);
         }
-        events.publish("recalc.started", Map.of("trigger", trigger));
+        long runId = openRun(trigger);
+        events.publish("recalc.started", Map.of("runId", runId, "trigger", trigger));
         try {
-            Step step = transaction.execute(status -> jdbc.sql(
-                            "SELECT status, accounts_processed, model_version FROM public.recalculate_risk(:trigger)")
+            Step step = transaction.execute(status -> jdbc.sql("SELECT status, accounts_processed, model_version"
+                            + " FROM public.recalculate_risk(:trigger, :runId)")
                     .param("trigger", trigger)
+                    .param("runId", runId)
                     .query((rs, row) -> new Step(
                             rs.getString("status"), rs.getInt("accounts_processed"), rs.getLong("model_version")))
                     .single());
+            if (!"ok".equals(step.status())) {
+                discard(runId);
+            }
             return finish(trigger, step);
         } catch (RuntimeException e) {
-            return fail(trigger, e);
+            return fail(trigger, runId, e);
         }
     }
 
@@ -135,7 +139,21 @@ public class RecalcService {
         };
     }
 
-    private Outcome fail(String trigger, RuntimeException failure) {
+    private long openRun(String trigger) {
+        return jdbc.sql("INSERT INTO public.recalc_runs (trigger, started_at, status)"
+                        + " VALUES (:trigger, now(), 'running') RETURNING id")
+                .param("trigger", trigger)
+                .query(Long.class)
+                .single();
+    }
+
+    private void discard(long runId) {
+        jdbc.sql("DELETE FROM public.recalc_runs WHERE id = :id AND status = 'running'")
+                .param("id", runId)
+                .update();
+    }
+
+    private Outcome fail(String trigger, long runId, RuntimeException failure) {
         boolean concurrent = isSerializationFailure(failure);
         String error = concurrent ? "concurrent" : truncate(rootMessage(failure));
         if (concurrent) {
@@ -143,24 +161,18 @@ public class RecalcService {
         } else {
             log.error("recalculation failed: trigger={}", trigger, failure);
         }
-        Long runId = null;
         try {
-            runId = jdbc.sql("INSERT INTO public.recalc_runs"
-                            + " (trigger, started_at, finished_at, as_of, model_version, status, error)"
-                            + " SELECT :trigger, now(), now(), public.model_now(),"
-                            + " (SELECT max(version) FROM public.model_revisions), 'failed', :error RETURNING id")
-                    .param("trigger", trigger)
+            jdbc.sql("UPDATE public.recalc_runs"
+                            + " SET finished_at = now(), as_of = public.model_now(),"
+                            + " model_version = (SELECT max(version) FROM public.model_revisions),"
+                            + " status = 'failed', error = :error WHERE id = :id")
                     .param("error", error)
-                    .query(Long.class)
-                    .single();
+                    .param("id", runId)
+                    .update();
         } catch (RuntimeException e) {
             log.warn("failed run was not recorded: {}", e.getMessage());
         }
-        Map<String, Object> event = new LinkedHashMap<>();
-        event.put("runId", runId);
-        event.put("trigger", trigger);
-        event.put("error", error);
-        events.publish("recalc.failed", event);
+        events.publish("recalc.failed", Map.of("runId", runId, "trigger", trigger, "error", error));
         return new Outcome(Result.FAILED, 0);
     }
 

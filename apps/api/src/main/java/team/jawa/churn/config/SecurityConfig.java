@@ -22,6 +22,7 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepo
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.csrf.CsrfToken;
@@ -75,6 +76,9 @@ class SecurityConfig {
                                 paths.matcher(HttpMethod.POST, "/api/v1/auth/login"),
                                 paths.matcher(HttpMethod.POST, "/api/v1/auth/refresh")))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .securityContext(
+                        context -> context.securityContextRepository(new RequestAttributeSecurityContextRepository())
+                                .requireExplicitSave(true))
                 .addFilterBefore(new ApiKeyAuthenticationFilter(apiKeys, problems), BasicAuthenticationFilter.class)
                 .addFilterBefore(new JwtCookieAuthenticationFilter(jwt, cookies), BasicAuthenticationFilter.class)
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
