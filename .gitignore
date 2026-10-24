@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.gradle/
+*.log
+.env
+.env.build
+coverage/
+playwright-report/
+test-results/
+.idea/
+.vscode/
+*.iml
+.DS_Store

@@ -1,0 +1,16 @@
+commit-msg:
+  commands:
+    format:
+      run: node -e "const m=require('fs').readFileSync(process.argv[1],'utf8').split('\n')[0]; if(!/^(feat!|feat|fix): [a-z0-9].{2,71}$/.test(m)){console.error('commit message must match: feat|feat!|fix: lowercase subject, max 72 chars');process.exit(1)}" {1}
+pre-commit:
+  parallel: true
+  commands:
+    web-format:
+      glob: "apps/web/**/*.{ts,tsx,js,json,css,md}"
+      run: npm --prefix apps/web exec -- prettier --check {staged_files}
+    web-lint:
+      glob: "apps/web/src/**/*.{ts,tsx}"
+      run: npm --prefix apps/web exec -- eslint {staged_files}
+    api-format:
+      glob: "apps/api/**/*.java"
+      run: make -C apps/api format-check

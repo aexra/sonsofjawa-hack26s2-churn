@@ -1,0 +1,15 @@
+.git
+.gitignore
+.gitattributes
+.env
+.env.build
+.idea
+.vscode
+**/node_modules
+**/dist
+**/build
+**/.gradle
+**/coverage
+**/playwright-report
+**/test-results
+**/*.log
