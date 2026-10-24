@@ -4,21 +4,9 @@ import { NavLink } from 'react-router';
 
 import { runtimeConfig } from '@/shared/config/runtime';
 import { ru } from '@/shared/i18n/ru';
-import { cn } from '@/shared/lib/cn';
+import { BrandLogo } from '@/shared/ui/brand-logo';
 
 import { helpIcon, NAV_GROUPS } from '../model/nav';
-
-const MARK = [
-  'bg-risk-high',
-  'bg-risk-medium-fill',
-  'bg-risk-low',
-  'bg-accent',
-  'bg-accent',
-  'bg-risk-low',
-  'bg-accent',
-  'bg-accent',
-  'bg-accent',
-];
 
 const itemClass =
   'flex h-control-md flex-none items-center gap-2 rounded-sm px-3 text-body-strong text-ink-muted no-underline transition-colors duration-120 ease-out hover:bg-surface-sunken hover:text-ink aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent';
@@ -32,16 +20,9 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
       aria-label={ru.nav.main}
       className="box-border flex w-full flex-none items-center gap-1 overflow-x-auto border-b border-line bg-surface px-3 py-2 md:sticky md:top-0 md:h-screen md:w-sidebar md:flex-col md:items-stretch md:overflow-x-visible md:overflow-y-auto md:border-r md:border-b-0 md:px-3 md:py-4"
     >
-      <div className="flex flex-none items-center gap-2 pr-2 pl-1 font-display text-heading whitespace-nowrap md:px-2 md:pb-4">
-        <span
-          aria-hidden="true"
-          className="box-border grid size-6 grid-cols-3 gap-0.5 rounded-xs bg-ink p-1"
-        >
-          {MARK.map((color, index) => (
-            <i key={index} className={cn('block rounded-[1px]', color)} />
-          ))}
-        </span>
-        {ru.app.productName}
+      <div className="flex flex-none flex-col gap-1 pr-2 pl-1 whitespace-nowrap md:px-2 md:pb-4">
+        <BrandLogo size={22} />
+        <span className="hidden font-display text-heading md:block">{ru.app.productName}</span>
       </div>
       {NAV_GROUPS.filter((group) => !group.adminOnly || isAdmin).map((group) => (
         <Fragment key={group.id}>

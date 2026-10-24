@@ -1,12 +1,34 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './theme.css';
-@import '@fontsource-variable/montserrat';
-@import '@fontsource-variable/golos-text';
+@import '@fontsource-variable/exo-2';
+@import '@fontsource-variable/inter';
 @import '@fontsource-variable/jetbrains-mono';
 
 @theme inline {
-  --font-display: 'Montserrat Variable', 'Segoe UI', Arial, sans-serif;
-  --font-sans: 'Golos Text Variable', 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-display: 'Exo 2 Variable', 'Segoe UI', Arial, sans-serif;
+  --font-sans: 'Inter Variable', 'Segoe UI', Roboto, Arial, sans-serif;
   --font-mono: 'JetBrains Mono Variable', 'Cascadia Mono', Consolas, monospace;
+}
+
+.brand-logo-white {
+  display: none;
+}
+
+:root[data-theme='dark'] .brand-logo-white {
+  display: inline-block;
+}
+
+:root[data-theme='dark'] .brand-logo-black {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .brand-logo-white {
+    display: inline-block;
+  }
+
+  :root:not([data-theme='light']) .brand-logo-black {
+    display: none;
+  }
 }
