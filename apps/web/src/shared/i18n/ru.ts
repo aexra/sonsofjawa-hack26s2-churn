@@ -45,6 +45,13 @@ export const ru = {
     title: 'раздел в разработке',
     text: 'содержимое страницы появится в одной из следующих версий',
   },
+  recalc: {
+    updated: (time: string) => `обновлено ${time}`,
+    running: 'пересчёт…',
+    failed: 'ошибка пересчёта',
+    failedUnknown: 'причина не указана',
+    offline: 'нет связи с сервером',
+  },
   login: {
     title: 'вход',
     login: 'логин',

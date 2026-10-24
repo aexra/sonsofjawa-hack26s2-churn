@@ -7,6 +7,8 @@ import { ru } from '@/shared/i18n/ru';
 import { Sidebar } from './sidebar';
 import { UserMenu } from './user-menu';
 
+import type { ReactNode } from 'react';
+
 export interface RouteHandle {
   title: string;
   adminOnly?: boolean;
@@ -15,7 +17,7 @@ export interface RouteHandle {
 const isRouteHandle = (value: unknown): value is RouteHandle =>
   typeof value === 'object' && value !== null && 'title' in value;
 
-export function AppShell() {
+export function AppShell({ headerStatus }: { headerStatus?: ReactNode }) {
   const { user, isAdmin } = useSession();
   const handle = useMatches()
     .map((match) => match.handle)
@@ -35,9 +37,12 @@ export function AppShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-header flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-surface px-6 py-2">
           <h1 className="m-0 font-display text-title text-ink">{title}</h1>
-          {user && (
-            <UserMenu login={user.login} role={user.role} authProvider={user.authProvider} />
-          )}
+          <div className="flex flex-wrap items-center gap-4">
+            {headerStatus}
+            {user && (
+              <UserMenu login={user.login} role={user.role} authProvider={user.authProvider} />
+            )}
+          </div>
         </header>
         <main className="mx-auto box-border w-full max-w-content-max min-w-0 flex-1 p-6">
           <Outlet />

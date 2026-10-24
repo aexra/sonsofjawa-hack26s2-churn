@@ -11,6 +11,7 @@ import { NotFoundPage } from '@/pages/not-found';
 import { OverviewPage } from '@/pages/overview';
 import { ru } from '@/shared/i18n/ru';
 import { AppShell, type RouteHandle } from '@/widgets/app-shell';
+import { RecalcIndicator } from '@/widgets/recalc-indicator';
 
 import { RequireAdmin, RequireAuth } from './guards';
 
@@ -22,7 +23,7 @@ export const routes: RouteObject[] = [
     element: <RequireAuth />,
     children: [
       {
-        element: <AppShell />,
+        element: <AppShell headerStatus={<RecalcIndicator />} />,
         children: [
           { index: true, element: <OverviewPage />, handle: handle(ru.pages.overview) },
           { path: 'customers', element: <CustomersPage />, handle: handle(ru.pages.customers) },
