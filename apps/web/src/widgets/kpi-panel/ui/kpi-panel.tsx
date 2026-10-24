@@ -25,7 +25,7 @@ function KpiCards({ summary }: { summary: AnalyticsSummary }) {
         primary
         label={text.loss(horizonDays)}
         value={hasScores ? formatAmount(money.expectedLoss) : dash}
-        unit={hasScores ? '€' : undefined}
+        unit={hasScores ? ru.common.euro : undefined}
         hint={hasScores ? text.lossHint(accounts.scored) : undefined}
       />
       <KpiCard
@@ -42,7 +42,7 @@ function KpiCards({ summary }: { summary: AnalyticsSummary }) {
       <KpiCard
         label={text.revenue}
         value={hasScores ? formatAmount(money.revenueAtRisk) : dash}
-        unit={hasScores ? '€' : undefined}
+        unit={hasScores ? ru.common.euro : undefined}
         hint={hasScores ? text.revenueHint(horizonDays) : undefined}
       />
       <KpiCard

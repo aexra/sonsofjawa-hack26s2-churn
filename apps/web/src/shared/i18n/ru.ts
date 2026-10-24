@@ -289,6 +289,7 @@ export const ru = {
     loadFailed: 'не удалось загрузить данные',
     loadFailedText: 'проверьте соединение и повторите попытку',
     emptyValue: '—',
+    euro: '€',
   },
   risk: {
     high: 'высокий',

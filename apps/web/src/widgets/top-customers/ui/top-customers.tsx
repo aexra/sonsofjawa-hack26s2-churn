@@ -1,12 +1,12 @@
 import { Link, useNavigate } from 'react-router';
 
+import { ReasonText } from '@/entities/reason';
 import { RiskBadge } from '@/entities/risk-level';
 import { ru } from '@/shared/i18n/ru';
 import { formatMoney } from '@/shared/lib/format';
 import { BlockError } from '@/shared/ui/block-error';
 import { DataTable } from '@/shared/ui/data-table';
 import { Skeleton } from '@/shared/ui/skeleton';
-import { Tooltip } from '@/shared/ui/tooltip';
 
 import { useTopCustomers } from '../model/use-top-customers';
 
@@ -48,11 +48,7 @@ export function TopCustomers() {
               label: text.columns.id,
               align: 'right',
               mono: true,
-              render: (row) => (
-                <Link to={`/customers/${row.id}`} onClick={(event) => event.stopPropagation()}>
-                  {row.id}
-                </Link>
-              ),
+              render: (row) => <Link to={`/customers/${row.id}`}>{row.id}</Link>,
             },
             { key: 'email', label: text.columns.email, mono: true, render: (row) => row.email },
             {
@@ -66,13 +62,7 @@ export function TopCustomers() {
               key: 'reason',
               label: text.columns.reason,
               render: (row) =>
-                row.topReason ? (
-                  <Tooltip content={row.topReason.text}>
-                    <span className="block max-w-80 truncate">{row.topReason.text}</span>
-                  </Tooltip>
-                ) : (
-                  ru.common.emptyValue
-                ),
+                row.topReason ? <ReasonText reason={row.topReason} /> : ru.common.emptyValue,
             },
             {
               key: 'loss',
