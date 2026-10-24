@@ -1,8 +1,10 @@
 package team.jawa.churn.analytics;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import team.jawa.churn.recalc.RecalcService;
@@ -86,23 +88,18 @@ class AnalyticsRepository {
     }
 
     private List<Summary.Bucket> histogram() {
-        int[] counts = new int[BUCKETS];
-        jdbc.sql("""
+        Map<Integer, Integer> customers =
+                jdbc.sql("""
                         SELECT least(width_bucket(risk_score, 0, 100, 10), 10) AS bucket, count(*)::int AS customers
                         FROM public.customer_scores_vw
                         WHERE risk_score IS NOT NULL
                         GROUP BY 1
-                        """)
-                .query((rs, row) -> {
-                    counts[rs.getInt("bucket") - 1] = rs.getInt("customers");
-                    return null;
-                })
-                .list();
-        List<Summary.Bucket> buckets = new ArrayList<>(BUCKETS);
-        for (int i = 0; i < BUCKETS; i++) {
-            buckets.add(new Summary.Bucket(i * BUCKET_WIDTH, (i + 1) * BUCKET_WIDTH, counts[i]));
-        }
-        return buckets;
+                        """).query((rs, row) -> Map.entry(rs.getInt("bucket"), rs.getInt("customers"))).list().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        return IntStream.rangeClosed(1, BUCKETS)
+                .mapToObj(bucket -> new Summary.Bucket(
+                        (bucket - 1) * BUCKET_WIDTH, bucket * BUCKET_WIDTH, customers.getOrDefault(bucket, 0)))
+                .toList();
     }
 
     private List<Summary.Reason> topReasons() {

@@ -5,9 +5,10 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
@@ -31,9 +32,11 @@ public class ChurnChartService {
 
     public record Chart(OffsetDateTime asOf, int horizonDays, List<Point> points) {}
 
-    private record Deletions(int observed, int estimated) {}
+    private record Deletions(LocalDate day, int observed, int estimated) {}
 
-    private record Forecast(BigDecimal nonRenewals, long lossAmount) {}
+    private record AtRisk(LocalDate day, int services) {}
+
+    private record Forecast(LocalDate day, BigDecimal nonRenewals, long lossAmount) {}
 
     private final JdbcClient jdbc;
 
@@ -53,45 +56,48 @@ public class ChurnChartService {
         LocalDate first = today.minusDays(pastDays);
         LocalDate last = today.plusDays(ahead);
 
-        Map<LocalDate, Deletions> deletions = deletions(first, today);
-        Map<LocalDate, Integer> atRisk = servicesAtRisk(first, today);
-        Map<LocalDate, Forecast> forecast = forecast(today, last, horizonDays);
+        Map<LocalDate, Deletions> deletions = byDay(deletions(first, today), Deletions::day);
+        Map<LocalDate, AtRisk> atRisk = byDay(servicesAtRisk(first, today), AtRisk::day);
+        Map<LocalDate, Forecast> forecast = byDay(forecast(today, last, horizonDays), Forecast::day);
 
         List<Point> points = new ArrayList<>(pastDays + ahead + 1);
         for (LocalDate day = first; !day.isAfter(last); day = day.plusDays(1)) {
-            points.add(point(day, today, deletions, atRisk, forecast));
+            Deletions removed = deletions.getOrDefault(day, new Deletions(day, 0, 0));
+            Forecast expected = forecast.getOrDefault(day, new Forecast(day, BigDecimal.ZERO, 0));
+            Integer services = atRisk.containsKey(day) ? atRisk.get(day).services() : null;
+            points.add(
+                    switch (Integer.signum(day.compareTo(today))) {
+                        case -1 ->
+                            new Point(day, Kind.FACT, removed.observed(), removed.estimated(), services, null, null);
+                        case 0 ->
+                            new Point(
+                                    day,
+                                    Kind.TODAY,
+                                    removed.observed(),
+                                    removed.estimated(),
+                                    services,
+                                    expected.nonRenewals(),
+                                    expected.lossAmount());
+                        default ->
+                            new Point(
+                                    day,
+                                    Kind.FORECAST,
+                                    null,
+                                    null,
+                                    null,
+                                    expected.nonRenewals(),
+                                    expected.lossAmount());
+                    });
         }
         return new Chart(asOf, horizonDays, points);
     }
 
-    private static Point point(
-            LocalDate day,
-            LocalDate today,
-            Map<LocalDate, Deletions> deletions,
-            Map<LocalDate, Integer> atRisk,
-            Map<LocalDate, Forecast> forecast) {
-        if (day.isAfter(today)) {
-            Forecast expected = forecast.getOrDefault(day, new Forecast(BigDecimal.ZERO, 0));
-            return new Point(day, Kind.FORECAST, null, null, null, expected.nonRenewals(), expected.lossAmount());
-        }
-        Deletions removed = deletions.getOrDefault(day, new Deletions(0, 0));
-        if (day.isBefore(today)) {
-            return new Point(day, Kind.FACT, removed.observed(), removed.estimated(), atRisk.get(day), null, null);
-        }
-        Forecast expected = forecast.getOrDefault(day, new Forecast(BigDecimal.ZERO, 0));
-        return new Point(
-                day,
-                Kind.TODAY,
-                removed.observed(),
-                removed.estimated(),
-                atRisk.get(day),
-                expected.nonRenewals(),
-                expected.lossAmount());
+    private static <T> Map<LocalDate, T> byDay(List<T> rows, Function<T, LocalDate> day) {
+        return rows.stream().collect(Collectors.toMap(day, Function.identity()));
     }
 
-    private Map<LocalDate, Deletions> deletions(LocalDate first, LocalDate today) {
-        Map<LocalDate, Deletions> result = new HashMap<>();
-        jdbc.sql("""
+    private List<Deletions> deletions(LocalDate first, LocalDate today) {
+        return jdbc.sql("""
                         SELECT (deleted_at AT TIME ZONE 'UTC')::date AS day,
                                count(*) FILTER (WHERE NOT estimated)::int AS observed,
                                count(*) FILTER (WHERE estimated)::int AS estimated
@@ -101,19 +107,13 @@ public class ChurnChartService {
                         """)
                 .param("first", first)
                 .param("today", today)
-                .query((rs, row) -> {
-                    result.put(
-                            rs.getObject("day", LocalDate.class),
-                            new Deletions(rs.getInt("observed"), rs.getInt("estimated")));
-                    return null;
-                })
+                .query((rs, row) -> new Deletions(
+                        rs.getObject("day", LocalDate.class), rs.getInt("observed"), rs.getInt("estimated")))
                 .list();
-        return result;
     }
 
-    private Map<LocalDate, Integer> servicesAtRisk(LocalDate first, LocalDate today) {
-        Map<LocalDate, Integer> result = new HashMap<>();
-        jdbc.sql("""
+    private List<AtRisk> servicesAtRisk(LocalDate first, LocalDate today) {
+        return jdbc.sql("""
                         SELECT DISTINCT ON ((as_of AT TIME ZONE 'UTC')::date)
                                (as_of AT TIME ZONE 'UTC')::date AS day, services_at_risk
                         FROM public.analytics_snapshots
@@ -122,17 +122,12 @@ public class ChurnChartService {
                         """)
                 .param("first", first)
                 .param("today", today)
-                .query((rs, row) -> {
-                    result.put(rs.getObject("day", LocalDate.class), rs.getInt("services_at_risk"));
-                    return null;
-                })
+                .query((rs, row) -> new AtRisk(rs.getObject("day", LocalDate.class), rs.getInt("services_at_risk")))
                 .list();
-        return result;
     }
 
-    private Map<LocalDate, Forecast> forecast(LocalDate today, LocalDate last, int horizonDays) {
-        Map<LocalDate, Forecast> result = new HashMap<>();
-        jdbc.sql("""
+    private List<Forecast> forecast(LocalDate today, LocalDate last, int horizonDays) {
+        return jdbc.sql("""
                         SELECT (expected_at AT TIME ZONE 'UTC')::date AS day,
                                sum(risk_weight) AS non_renewals,
                                round(sum(risk_weight * price * :horizon / public.term_days(payment_term)))::bigint AS loss
@@ -143,13 +138,8 @@ public class ChurnChartService {
                 .param("horizon", horizonDays)
                 .param("today", today)
                 .param("last", last)
-                .query((rs, row) -> {
-                    result.put(
-                            rs.getObject("day", LocalDate.class),
-                            new Forecast(rs.getBigDecimal("non_renewals"), rs.getLong("loss")));
-                    return null;
-                })
+                .query((rs, row) -> new Forecast(
+                        rs.getObject("day", LocalDate.class), rs.getBigDecimal("non_renewals"), rs.getLong("loss")))
                 .list();
-        return result;
     }
 }
