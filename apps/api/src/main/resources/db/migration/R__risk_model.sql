@@ -25,7 +25,7 @@ INSERT INTO model_settings_declared VALUES
     ('weight_renewal_unsecured', 'weights', 25, 0, 100, 'points',
      'продление не обеспечено',
      'вес признака: услуга истекает в пределах горизонта и не продлится автоматически', 10),
-    ('weight_insufficient_funds', 'weights', 22, 0, 100, 'points',
+    ('weight_insufficient_funds', 'weights', 25, 0, 100, 'points',
      'нехватка средств на продления',
      'вес признака: средств на балансе меньше, чем нужно на продления в пределах горизонта', 20),
     ('weight_prolong_wait', 'weights', 30, 0, 100, 'points',
@@ -35,14 +35,11 @@ INSERT INTO model_settings_declared VALUES
      'выключенные клиентом услуги',
      'вес признака: доля выручки услуг в статусе suspended', 40),
     ('weight_termination_history', 'weights', 5, 0, 100, 'points',
-     'история удалений и блокировок',
-     'вес признака: доля удалённых и заблокированных услуг аккаунта', 50),
+     'история удалений',
+     'вес признака: доля удалённых услуг среди действующих и удалённых; блокировки не учитываются', 50),
     ('weight_payment_failures', 'weights', 5, 0, 100, 'points',
-     'незавершённые платежи',
-     'вес признака: доля транзакций в статусе not_performed', 60),
-    ('weight_withdrawable_share', 'weights', 3, 0, 100, 'points',
-     'баланс доступен к выводу',
-     'вес признака: доля баланса, которую клиент может вывести', 70),
+     'просроченные продления',
+     'вес признака: доля неоплаченных продлений старше порога в окне наблюдения', 60),
     ('level_high', 'levels', 50, 1, 100, 'points',
      'порог высокого риска',
      'risk-score не ниже порога — высокий риск', 110),
@@ -60,7 +57,13 @@ INSERT INTO model_settings_declared VALUES
      'через сколько часов оценка пересчитывается, даже если данные не менялись', 310),
     ('min_transactions', 'quality', 2, 1, 100, 'count',
      'минимум транзакций',
-     'меньше транзакций — признак незавершённых платежей не учитывается', 320);
+     'меньше подходящих продлений — признак просроченных продлений не учитывается', 320),
+    ('payment_overdue_hours', 'quality', 24, 1, 720, 'hours',
+     'порог просрочки продления',
+     'минимальный возраст продления для учёта неоплаты', 330),
+    ('payment_lookback_days', 'quality', 30, 2, 365, 'days',
+     'окно наблюдения платежей',
+     'старые транзакции за пределами окна не влияют на оценку', 340);
 
 DELETE FROM public.model_settings s
 WHERE NOT EXISTS (SELECT 1 FROM model_settings_declared d WHERE d.key = s.key);
@@ -102,17 +105,13 @@ INSERT INTO model_features_declared VALUES
      'доля выручки за горизонт, приходящаяся на услуги в статусе suspended',
      '{count} из {live} действующих услуг выключены клиентом ({sharePct}% выручки)', 40),
     ('termination_history', 'weight_termination_history',
-     'история удалений и блокировок',
-     'доля услуг в статусах deleted и blocked среди всех услуг аккаунта',
-     '{count} из {total} услуг удалены или заблокированы', 50),
+     'история удалений',
+     'deleted / (active + suspended + prolong_wait + deleted); blocked исключён',
+     '{count} из {total} учитываемых услуг удалены', 50),
     ('payment_failures', 'weight_payment_failures',
-     'незавершённые платежи',
-     'доля транзакций not_performed; 0, если транзакций меньше минимума',
-     '{count} из {total} платежей не завершены', 60),
-    ('withdrawable_share', 'weight_withdrawable_share',
-     'баланс доступен к выводу',
-     'withdrawBalance / balance',
-     '{sharePct}% баланса доступно к выводу', 70);
+     'просроченные продления',
+     'доля not_performed среди достаточно давних prolong действующих услуг в окне наблюдения',
+     '{count} из {total} продлений старше {overdueHours} ч не оплачены за окно {lookbackDays} дн.', 60);
 
 DELETE FROM public.model_features f
 WHERE NOT EXISTS (SELECT 1 FROM model_features_declared d WHERE d.key = f.key);
@@ -141,7 +140,9 @@ p AS (
         max(value) FILTER (WHERE key = 'level_high') AS level_high,
         max(value) FILTER (WHERE key = 'level_medium') AS level_medium,
         max(value) FILTER (WHERE key = 'max_score_age_hours') AS max_age_hours,
-        max(value) FILTER (WHERE key = 'min_transactions') AS min_transactions
+        max(value) FILTER (WHERE key = 'min_transactions') AS min_transactions,
+        max(value) FILTER (WHERE key = 'payment_overdue_hours') AS payment_overdue_hours,
+        max(value) FILTER (WHERE key = 'payment_lookback_days') AS payment_lookback_days
     FROM public.model_settings
 ),
 w AS (
@@ -186,8 +187,8 @@ svc2 AS (
         svc.*,
         CASE WHEN is_live THEN least(greatest(1 - days_left / p.horizon_days, 0), 1) ELSE 0 END AS urgency,
         CASE WHEN is_live THEN price * p.horizon_days / term_days ELSE 0 END AS revenue_h,
-        CASE WHEN NOT is_live OR days_left > p.horizon_days THEN 0
-             ELSE 1 + floor((p.horizon_days - days_left) / term_days)
+        CASE WHEN NOT is_live OR days_left >= p.horizon_days THEN 0
+             ELSE ceil((p.horizon_days - days_left) / term_days)
         END AS renewals_h
     FROM svc CROSS JOIN p
 ),
@@ -196,7 +197,8 @@ agg AS (
         account_id,
         count(*) AS services_total,
         count(*) FILTER (WHERE is_live) AS services_live,
-        count(*) FILTER (WHERE status IN ('deleted', 'blocked')) AS services_terminated,
+        count(*) FILTER (WHERE status = 'deleted') AS services_terminated,
+        count(*) FILTER (WHERE status <> 'blocked') AS services_considered,
         count(*) FILTER (WHERE status = 'prolong_wait') AS services_prolong_wait,
         count(*) FILTER (WHERE status = 'suspended') AS services_suspended,
         coalesce(sum(revenue_h), 0) AS revenue_h,
@@ -216,14 +218,32 @@ top_unsecured AS (
     WHERE is_live AND (NOT auto_prolong OR status = 'prolong_wait') AND urgency > 0
     ORDER BY account_id, urgency DESC, price DESC, id
 ),
-tx AS (
-    SELECT s."ownerId" AS account_id,
-           count(*) AS total,
-           count(*) FILTER (WHERE t.status = 'not_performed') AS failed
+tx_candidates AS (
+    SELECT s."ownerId" AS account_id, t.status, t."createdAt" AS created_at,
+           t."createdAt" <= c.as_of - p.payment_overdue_hours * interval '1 hour' AS mature,
+           c.as_of,
+           p.payment_overdue_hours, p.payment_lookback_days
     FROM public.transactions t
     JOIN public.services s ON s.id = t."serviceId"
     JOIN batch b ON b.account_id = s."ownerId"
-    GROUP BY s."ownerId"
+    CROSS JOIN clock c
+    CROSS JOIN p
+    WHERE t.type = 'prolong'
+      AND s.status IN ('active', 'suspended', 'prolong_wait')
+      AND t."createdAt" <= c.as_of
+      AND t."createdAt" > c.as_of - p.payment_lookback_days * interval '1 day'
+),
+tx AS (
+    SELECT account_id,
+           count(*) FILTER (WHERE mature) AS total,
+           count(*) FILTER (WHERE mature AND status = 'not_performed') AS failed,
+           min((SELECT min(boundary)
+                FROM unnest(ARRAY[
+                    created_at + payment_overdue_hours * interval '1 hour',
+                    created_at + payment_lookback_days * interval '1 day'
+                ]) AS boundary WHERE boundary > as_of)) AS next_boundary
+    FROM tx_candidates
+    GROUP BY account_id
 ),
 base AS (
     SELECT
@@ -236,6 +256,7 @@ base AS (
         coalesce(g.services_total, 0) AS services_total,
         coalesce(g.services_live, 0) AS services_live,
         coalesce(g.services_terminated, 0) AS services_terminated,
+        coalesce(g.services_considered, 0) AS services_considered,
         coalesce(g.services_prolong_wait, 0) AS services_prolong_wait,
         coalesce(g.services_suspended, 0) AS services_suspended,
         coalesce(g.revenue_h, 0) AS revenue_h,
@@ -243,7 +264,7 @@ base AS (
         coalesce(g.revenue_auto, 0) AS revenue_auto,
         coalesce(g.required_h, 0) AS required_h,
         g.next_expiry_at,
-        g.next_boundary,
+        least(g.next_boundary, tx.next_boundary) AS next_boundary,
         coalesce(g.any_expired_but_live, false) AS any_expired_but_live,
         coalesce(g.any_overdue_prolong_wait, false) AS any_overdue_prolong_wait,
         te.service_id AS top_service_id,
@@ -266,9 +287,8 @@ feat AS (
         CASE WHEN services_prolong_wait > 0 AND services_live > 0
              THEN 0.5 + 0.5 * services_prolong_wait::numeric / services_live ELSE 0 END AS f_prolong_wait,
         CASE WHEN revenue_h > 0 THEN revenue_suspended / revenue_h ELSE 0 END AS f_suspended_share,
-        CASE WHEN services_total > 0 THEN services_terminated::numeric / services_total ELSE 0 END AS f_termination_history,
-        CASE WHEN tx_total >= p.min_transactions THEN tx_failed::numeric / tx_total ELSE 0 END AS f_payment_failures,
-        CASE WHEN balance > 0 THEN least(withdraw_balance::numeric / balance, 1) ELSE 0 END AS f_withdrawable_share
+        CASE WHEN services_considered > 0 THEN services_terminated::numeric / services_considered ELSE 0 END AS f_termination_history,
+        CASE WHEN tx_total >= p.min_transactions THEN tx_failed::numeric / tx_total ELSE 0 END AS f_payment_failures
     FROM base CROSS JOIN p
 ),
 scored AS (
@@ -322,12 +342,12 @@ scored AS (
                 'sharePct', round(feat.f_suspended_share * 100))),
             ('termination_history', feat.f_termination_history, jsonb_build_object(
                 'count', feat.services_terminated,
-                'total', feat.services_total)),
+                'total', feat.services_considered)),
             ('payment_failures', feat.f_payment_failures, jsonb_build_object(
                 'count', feat.tx_failed,
-                'total', feat.tx_total)),
-            ('withdrawable_share', feat.f_withdrawable_share, jsonb_build_object(
-                'sharePct', round(feat.f_withdrawable_share * 100)))
+                'total', feat.tx_total,
+                'overdueHours', p.payment_overdue_hours,
+                'lookbackDays', p.payment_lookback_days))
         ) AS v(key, f, params)
         JOIN w ON w.key = v.key
     ) r
@@ -346,7 +366,7 @@ final AS (
             WHEN s.services_total = 0 THEN 'no_services'
             WHEN s.services_live = 0 THEN 'no_live_services'
         END AS no_score_reason,
-        least(s.revenue_auto, greatest(s.balance - s.withdraw_balance, 0)) AS secured
+        least(s.revenue_auto, s.funds) AS secured
     FROM scored s
 )
 SELECT
@@ -382,7 +402,6 @@ SELECT
     array_remove(ARRAY[
         CASE WHEN f.any_expired_but_live THEN 'expired_but_live' END,
         CASE WHEN f.any_overdue_prolong_wait THEN 'overdue_prolong_wait' END,
-        CASE WHEN f.withdraw_balance > f.balance THEN 'withdraw_exceeds_balance' END,
         CASE WHEN f.balance > f.total_replenished THEN 'balance_exceeds_replenished' END
     ], NULL) AS anomalies,
     CASE WHEN f.status = 'scored'
@@ -463,7 +482,7 @@ x AS (
             WHEN s."autoProlong" AND s.status <> 'prolong_wait'
             THEN coalesce((sc.features ->> 'insufficient_funds')::numeric, 0)
             ELSE 1
-        END AS probability,
+        END AS risk_weight,
         c.as_of,
         p.horizon_days
     FROM public.services s
@@ -472,10 +491,22 @@ x AS (
     CROSS JOIN p
     WHERE s.status IN ('active', 'suspended', 'prolong_wait')
 )
-SELECT service_id, account_id, price, payment_term, expected_at, round(probability, 4) AS probability
+SELECT service_id, account_id, price, payment_term, expected_at, round(risk_weight, 4) AS risk_weight
 FROM x
 WHERE expected_at <= as_of + horizon_days * interval '1 day'
-  AND probability > 0;
+  AND risk_weight > 0;
 
 INSERT INTO public.model_revisions (changed_by, source, changes)
 VALUES ('system', 'migration', jsonb_build_array(jsonb_build_object('file', 'R__risk_model.sql')));
+
+CREATE OR REPLACE VIEW public.model_metadata_vw AS
+SELECT
+    'heuristic_score'::text AS score_kind,
+    false AS probability_calibrated,
+    'heuristic_risk_weighted_revenue'::text AS money_estimate_kind,
+    'EUR'::text AS currency,
+    100 AS minor_units_per_currency,
+    (SELECT value FROM public.model_settings WHERE key = 'horizon_days') AS horizon_days,
+    'оценка выручки под риском'::text AS money_title,
+    'взвешенная по эвристическому score часть тарифной выручки за горизонт, не покрытая доступными средствами для автопродления; не прогноз фактических убытков'::text AS money_description,
+    'risk-score от 0 до 100 — приоритет внимания, а не вероятность ухода; веса относительные'::text AS score_description;
