@@ -37,13 +37,17 @@ public class ApiKeyService {
     public record Issued(ApiKeyRecord key, String secret) {}
 
     public Issued issue(String name, List<String> scopes, OffsetDateTime expiresAt, Long createdBy) {
+        String trimmed = name.trim();
+        if (trimmed.isEmpty()) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, "validation_failed", "name must not be blank");
+        }
         if (expiresAt != null && !expiresAt.isAfter(OffsetDateTime.now())) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_CONTENT, "validation_failed", "expiresAt must be in the future");
         }
         String prefix = randomString(PREFIX_ALPHABET, PREFIX_LENGTH);
         String secret = randomString(SECRET_ALPHABET, SECRET_LENGTH);
-        ApiKeyRecord record = keys.insert(name.trim(), prefix, hash(secret), scopes, createdBy, expiresAt);
+        ApiKeyRecord record = keys.insert(trimmed, prefix, hash(secret), scopes, createdBy, expiresAt);
         log.info("api key issued: prefix={} scopes={}", prefix, scopes);
         return new Issued(record, "ck_" + prefix + "_" + secret);
     }

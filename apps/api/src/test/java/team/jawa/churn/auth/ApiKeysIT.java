@@ -114,6 +114,7 @@ class ApiKeysIT extends IntegrationTest {
         String key = issue("reader", "[\"read\"]").secret();
 
         assertAllowed(status("GET", "/api/v1/customers", bearer(key)));
+        assertAllowed(status("GET", "/api/v1/customers", "bearer " + key));
         assertAllowed(status("GET", "/api/v1/analytics/summary", bearer(key)));
         assertAllowed(status("GET", "/api/v1/recalc/status", basic(key)));
         assertThat(status("POST", "/api/v1/recalc", bearer(key))).isEqualTo(403);
@@ -260,6 +261,7 @@ class ApiKeysIT extends IntegrationTest {
 
         for (String body : List.of(
                 "{\"name\":\"\",\"scopes\":[\"read\"]}",
+                "{\"name\":\"   \",\"scopes\":[\"read\"]}",
                 "{\"name\":\"x\",\"scopes\":[]}",
                 "{\"name\":\"x\",\"scopes\":[\"read\"],\"expiresAt\":\"" + past + "\"}")) {
             HttpResponse<String> response = admin.exchange("POST", "/api/v1/admin/api-keys", body, Map.of(), true);

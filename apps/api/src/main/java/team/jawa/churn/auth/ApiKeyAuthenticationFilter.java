@@ -52,10 +52,10 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private static Optional<String> presentedKey(String header) {
-        if (header.startsWith(BEARER)) {
+        if (header.regionMatches(true, 0, BEARER, 0, BEARER.length())) {
             return Optional.of(header.substring(BEARER.length()).trim());
         }
-        if (header.startsWith(BASIC)) {
+        if (header.regionMatches(true, 0, BASIC, 0, BASIC.length())) {
             try {
                 String decoded = new String(
                         Base64.getDecoder()
