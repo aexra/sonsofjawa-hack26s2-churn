@@ -3,7 +3,6 @@ package team.jawa.churn;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 class DeltaTriggersIT extends IntegrationTest {
 
     private static final String FROZEN_AT = "2026-10-19T15:00:00Z";
+    private static final String SETTING_KEY = "weight_prolong_wait";
 
     @Autowired
     JdbcTemplate jdbc;
@@ -63,13 +63,16 @@ class DeltaTriggersIT extends IntegrationTest {
         insertAccounts(1, 2);
         jdbc.update("delete from delta");
 
-        insertService(10, 1, "active");
-        insertService(20, 2, "active");
+        jdbc.update(
+                "insert into services (id, name, \"ownerId\", \"paymentTerm\", \"createdAt\", \"expiresAt\", status, price)"
+                        + " values (10, 's10', 1, 'month', now(), now() + interval '20 days', 'active', 1000),"
+                        + " (20, 's20', 2, 'month', now(), now() + interval '20 days', 'active', 1000)");
         assertThat(queued("services")).containsExactly(1L, 2L);
 
         jdbc.update("delete from delta");
-        jdbc.update("insert into transactions (id, amount, type, \"serviceId\") values (1, 100, 'order', 10)");
-        assertThat(queued("transactions")).containsExactly(1L);
+        jdbc.update("insert into transactions (id, amount, type, \"serviceId\") values (1, 100, 'order', 10),"
+                + " (2, 200, 'order', 20)");
+        assertThat(queued("transactions")).containsExactly(1L, 2L);
     }
 
     @Test
@@ -126,20 +129,14 @@ class DeltaTriggersIT extends IntegrationTest {
         insertAccounts(1, 2);
         jdbc.update("delete from delta");
         Integer before = revisions("settings");
-        Map<String, Object> setting = jdbc.queryForMap(
-                "select key, value, min_value, max_value from model_settings where max_value > min_value limit 1");
-        String key = (String) setting.get("key");
 
-        jdbc.update(
-                "update model_settings set value = case when value = min_value then max_value else min_value end,"
-                        + " updated_by = 'tester' where key = ?",
-                key);
+        jdbc.update("update model_settings set value = value + 1, updated_by = 'tester' where key = ?", SETTING_KEY);
 
         assertThat(revisions("settings")).isEqualTo(before + 1);
         String changes = jdbc.queryForObject(
                 "select changes::text from model_revisions where source = 'settings' order by version desc limit 1",
                 String.class);
-        assertThat(changes).contains("\"key\": \"" + key + "\"");
+        assertThat(changes).contains("\"key\": \"" + SETTING_KEY + "\"");
         assertThat(jdbc.queryForObject(
                         "select changed_by from model_revisions order by version desc limit 1", String.class))
                 .isEqualTo("tester");
@@ -181,10 +178,13 @@ class DeltaTriggersIT extends IntegrationTest {
                         "select changed_at = ?::timestamptz from service_status_history", Boolean.class, FROZEN_AT))
                 .isTrue();
 
-        jdbc.update("update services set price = price + 1 where id = 10");
+        jdbc.update("insert into services (id, name, \"ownerId\", \"paymentTerm\", \"createdAt\", \"expiresAt\","
+                + " status, price) values (10, 'service-10', 1, 'month', now(), now() + interval '20 days', 'active', 1)"
+                + " on conflict (id) do update set price = excluded.price, status = excluded.status");
         assertThat(jdbc.queryForObject("select count(*) from service_status_history", Integer.class))
                 .isEqualTo(1);
 
+        jdbc.update("update model_clock set frozen_at = ?::timestamptz", "2026-10-20T15:00:00Z");
         jdbc.update("update services set status = 'deleted' where id = 10");
         assertThat(jdbc.queryForObject("select count(*) from service_status_history", Integer.class))
                 .isEqualTo(2);
@@ -192,5 +192,10 @@ class DeltaTriggersIT extends IntegrationTest {
                         "select from_status, to_status from service_status_history order by id desc limit 1"))
                 .containsEntry("from_status", "active")
                 .containsEntry("to_status", "deleted");
+        assertThat(jdbc.queryForObject(
+                        "select changed_at = '2026-10-20T15:00:00Z'::timestamptz from service_status_history"
+                                + " order by id desc limit 1",
+                        Boolean.class))
+                .isTrue();
     }
 }
