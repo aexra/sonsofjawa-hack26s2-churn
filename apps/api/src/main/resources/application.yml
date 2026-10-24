@@ -1,7 +1,13 @@
 server:
   port: ${SERVER_PORT:8080}
+  tomcat:
+    max-swallow-size: ${INGEST_MAX_BYTES:20MB}
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: ${INGEST_MAX_BYTES:20MB}
+      max-request-size: ${INGEST_MAX_BYTES:20MB}
   profiles:
     include: log-${LOG_FORMAT:text}
   application:
@@ -28,6 +34,10 @@ management:
       show-details: never
       probes:
         enabled: false
+
+ingest:
+  max-rows: ${INGEST_MAX_ROWS:100000}
+  max-bytes: ${INGEST_MAX_BYTES:20MB}
 
 recalc:
   enabled: ${RECALC_ENABLED:true}
