@@ -37,7 +37,7 @@ demo-data: ## regenerate the demo dataset
 demo-data-test: ## test the demo dataset generator
 	@$(MAKE) -C ops $@
 
-build-images: ## build api and web images
+build-images: ## build api, web and mcp images
 	@$(MAKE) -C ops $@
 
 push: ## build and push images to the registry

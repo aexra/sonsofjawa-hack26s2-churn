@@ -13,7 +13,7 @@ check-env-build:
 	@test -f $(ENV_BUILD_FILE) || { echo "файл .env.build не найден: скопируйте .env.build.example в .env.build"; exit 1; }
 
 up: check-env
-	$(COMPOSE) up -d --build --wait pg api web
+	$(COMPOSE) up -d --build --wait pg api web mcp
 	$(COMPOSE) run --rm seed
 
 down: check-env
@@ -45,7 +45,7 @@ demo-data-test:
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 
 build-images: check-env-build
-	$(COMPOSE_BUILD) build api web
+	$(COMPOSE_BUILD) build api web mcp
 
 push: build-images
-	$(COMPOSE_BUILD) push api web
+	$(COMPOSE_BUILD) push api web mcp

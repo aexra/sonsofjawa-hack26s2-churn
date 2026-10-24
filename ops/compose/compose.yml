@@ -61,6 +61,31 @@ services:
       timeout: 3s
       retries: 10
 
+  mcp:
+    image: ${IMAGE_REGISTRY:-churn}/churn-mcp:${IMAGE_TAG:-local}
+    build:
+      context: ../../apps/mcp
+      args:
+        BASE_REGISTRY: ${BASE_REGISTRY:-docker.io}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    environment:
+      CHURN_API_URL: http://api:8080
+      MCP_PORT: 8090
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${MCP_PORT:-8090}:8090"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=2)
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   seed:
     image: ${BASE_REGISTRY:-docker.io}/library/postgres:18-alpine
     restart: "no"
