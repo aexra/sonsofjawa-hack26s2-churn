@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  formatAmount,
   formatDate,
   formatDateTime,
   formatInt,
+  formatDayMonth,
   formatMoney,
   formatPercent,
+  formatPlainDate,
   formatScore,
+  formatTime,
 } from './format';
 
 const plain = (value: string) => value.replaceAll(new RegExp('[\u00a0\u202f]', 'g'), ' ');
@@ -35,5 +39,15 @@ describe('format', () => {
     const value = new Date(2026, 9, 19, 15, 4);
     expect(formatDateTime(value)).toBe('19.10.2026 15:04');
     expect(formatDate(value)).toBe('19.10.2026');
+  });
+
+  it('formats an amount without the currency sign', () => {
+    expect(plain(formatAmount(681905))).toBe('6 819,05');
+  });
+
+  it('formats a calendar date without time zone shifts', () => {
+    expect(formatPlainDate('2026-10-19')).toBe('19.10.2026');
+    expect(formatDayMonth('2026-10-19')).toBe('19.10');
+    expect(formatTime(new Date(2026, 9, 19, 15, 4))).toBe('15:04');
   });
 });

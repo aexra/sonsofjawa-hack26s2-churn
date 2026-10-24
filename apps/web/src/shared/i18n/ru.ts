@@ -1,3 +1,5 @@
+import { plural } from '@/shared/lib/plural';
+
 import type { ProblemCode } from '@/shared/api/api-error';
 
 export const ru = {
@@ -294,6 +296,99 @@ export const ru = {
     low: 'низкий',
     none: 'нет оценки',
     pending: 'расчёт…',
+  },
+  clock: {
+    moment: 'момент расчёта:',
+    real: 'реальное время',
+    frozen: 'зафиксированное время',
+    shifted: 'смещённое время',
+  },
+  overview: {
+    empty: {
+      title: 'данных пока нет',
+      text: 'загрузите клиентов, услуги и транзакции — оценка появится через несколько секунд',
+      textUser: 'данные появятся после загрузки администратором',
+      action: 'загрузить данные',
+    },
+    kpi: {
+      title: (days: number) => `сводка на горизонте ${days} дн.`,
+      formulaLink: 'как считаются ожидаемые потери',
+      loss: (days: number) => `ожидаемые потери за ${days} дн.`,
+      lossHint: (scored: number) =>
+        `по ${scored} ${plural(scored, { one: 'оценённому клиенту', few: 'оценённым клиентам', many: 'оценённым клиентам' })}`,
+      high: 'клиентов с высоким риском',
+      highOf: (scored: number) => `из ${scored}`,
+      highHint: (percent: number) => `${percent}% оценённых · открыть список`,
+      highHintEmpty: 'оценок пока нет · открыть список',
+      revenue: 'выручка клиентов с высоким риском',
+      revenueHint: (days: number) => `за ${days} дн., без учёта вероятности`,
+      average: 'средний risk-score',
+      withoutScore: (count: number) =>
+        `${count} ${plural(count, { one: 'клиент без оценки', few: 'клиента без оценки', many: 'клиентов без оценки' })}`,
+      allScored: 'оценены все клиенты',
+      noScores: 'оценок пока нет: у клиентов нет действующих услуг или расчёт ещё идёт',
+      formulaTitle: 'как считаются ожидаемые потери',
+      formulaText: (days: number) =>
+        `ожидаемые потери за ${days} дн. — выручка от действующих услуг клиента, которую он ещё не обеспечил деньгами на балансе, умноженная на оценку вероятности ухода (risk-score / 100).`,
+      formula: (days: number) =>
+        `потери = risk-score / 100 × (выручка за ${days} дн. − обеспечено балансом)`,
+      close: 'закрыть',
+    },
+    distribution: {
+      title: 'распределение по уровням риска',
+      barLabel: 'клиенты по уровням риска',
+      noScore: (count: number) =>
+        `у ${count} ${plural(count, { one: 'клиента', few: 'клиентов', many: 'клиентов' })} нет действующих услуг — все услуги удалены или заблокированы, оценки нет.`,
+      pending: (count: number) =>
+        `расчёт ещё не закончен у ${count} ${plural(count, { one: 'клиента', few: 'клиентов', many: 'клиентов' })}.`,
+      histogramTitle: 'клиентов по risk-score',
+      histogramLabel: 'распределение клиентов по risk-score',
+      bucket: (from: number, to: number, count: number) => `${from}–${to}: ${count}`,
+    },
+    reasons: {
+      title: 'чаще всего главная причина',
+      empty: 'главных причин пока нет',
+      customers: (count: number) =>
+        `${count} ${plural(count, { one: 'клиент', few: 'клиента', many: 'клиентов' })}`,
+      lastRecalc: 'последний пересчёт',
+      noRecalc: 'пересчётов ещё не было',
+      running: 'идёт сейчас',
+      failed: 'завершился ошибкой',
+      accounts: (count: number) =>
+        `${count} ${plural(count, { one: 'клиент', few: 'клиента', many: 'клиентов' })}`,
+      modelVersion: (version: number) => `версия модели ${version}`,
+      trigger: {
+        timer: 'таймер',
+        manual: 'вручную',
+        model: 'изменение модели',
+        snapshot: 'полная замена данных',
+        ingest: 'загрузка данных',
+      },
+    },
+    chart: {
+      title: 'отток услуг: факт и прогноз',
+      label: 'график оттока: факт и прогноз',
+      range: (past: number, future: number) => `${past} дн. назад · ${future} дн. вперёд`,
+      grace: (days: number) => `удаления до запуска оценены по сроку + ${days} дн.`,
+      now: 'сейчас',
+      facts: 'удаления (факт)',
+      estimated: 'удаления (оценка по сроку)',
+      forecast: 'ожидаемые непродления (прогноз)',
+      atRisk: 'услуг под риском',
+      loss: 'ожидаемые потери',
+    },
+    top: {
+      title: 'топ клиентов по ожидаемым потерям',
+      all: 'все клиенты',
+      empty: 'клиентов с высоким или средним риском нет',
+      columns: {
+        id: 'ID',
+        email: 'email',
+        score: 'risk-score',
+        reason: 'главная причина',
+        loss: 'ожидаемые потери',
+      },
+    },
   },
   errors: {
     unauthenticated: 'сессия истекла, войдите снова',

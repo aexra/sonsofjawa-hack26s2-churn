@@ -15,6 +15,8 @@ const dateParts = new Intl.DateTimeFormat('ru-RU', {
 
 export const formatMoney = (eurocents: number): string => money.format(eurocents / 100);
 
+export const formatAmount = (eurocents: number): string => decimal.format(eurocents / 100);
+
 export const formatInt = (value: number): string => integer.format(value);
 
 export const formatScore = (value: number): string => decimal.format(value);
@@ -29,3 +31,12 @@ export const formatDateTime = (value: Date | string): string => {
 };
 
 export const formatDate = (value: Date | string): string => formatDateTime(value).slice(0, 10);
+
+export const formatTime = (value: Date | string): string => formatDateTime(value).slice(11);
+
+export const formatPlainDate = (isoDate: string): string => {
+  const [year, month, day] = isoDate.split('-');
+  return `${day}.${month}.${year}`;
+};
+
+export const formatDayMonth = (isoDate: string): string => formatPlainDate(isoDate).slice(0, 5);
