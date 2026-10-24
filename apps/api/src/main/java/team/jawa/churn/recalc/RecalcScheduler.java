@@ -5,6 +5,7 @@ import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -21,6 +22,7 @@ public class RecalcScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(RecalcScheduler.class);
     private static final Duration FIRST_TICK = Duration.ofSeconds(5);
+    private static final String TIMER = "timer";
 
     private final RecalcService service;
     private final RecalcProperties properties;
@@ -46,7 +48,7 @@ public class RecalcScheduler {
         Duration interval = properties.interval();
         Duration first = interval.compareTo(FIRST_TICK) < 0 ? interval : FIRST_TICK;
         timer.scheduleWithFixedDelay(
-                () -> requestNow("timer"), first.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
+                () -> requestNow(TIMER), first.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
         log.info("recalculation timer started: interval={}", interval);
     }
 
@@ -59,11 +61,18 @@ public class RecalcScheduler {
     public synchronized State requestNow(String trigger) {
         if (running) {
             rerunRequested = true;
-            rerunTrigger = trigger;
+            if (rerunTrigger == null || !TIMER.equals(trigger)) {
+                rerunTrigger = trigger;
+            }
             return State.COALESCED;
         }
         running = true;
-        worker.submit(() -> loop(trigger));
+        try {
+            worker.submit(() -> loop(trigger));
+        } catch (RejectedExecutionException e) {
+            running = false;
+            throw e;
+        }
         return State.SCHEDULED;
     }
 
@@ -73,19 +82,32 @@ public class RecalcScheduler {
 
     private void loop(String firstTrigger) {
         String trigger = firstTrigger;
-        while (true) {
-            try {
-                service.run(trigger);
-            } catch (RuntimeException e) {
-                log.error("recalculation loop failed: trigger={}", trigger, e);
-            }
-            synchronized (this) {
-                if (!rerunRequested) {
-                    running = false;
-                    return;
+        boolean released = false;
+        try {
+            while (true) {
+                try {
+                    service.run(trigger);
+                } catch (RuntimeException e) {
+                    log.error("recalculation loop failed: trigger={}", trigger, e);
                 }
-                rerunRequested = false;
-                trigger = rerunTrigger;
+                synchronized (this) {
+                    if (!rerunRequested) {
+                        running = false;
+                        released = true;
+                        return;
+                    }
+                    rerunRequested = false;
+                    trigger = rerunTrigger;
+                    rerunTrigger = null;
+                }
+            }
+        } finally {
+            if (!released) {
+                synchronized (this) {
+                    running = false;
+                    rerunRequested = false;
+                    rerunTrigger = null;
+                }
             }
         }
     }

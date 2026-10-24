@@ -2,6 +2,7 @@ package team.jawa.churn.recalc;
 
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,7 +57,7 @@ public class RecalcService {
     }
 
     public Outcome run(String trigger) {
-        if (!hasWork()) {
+        if (!hasWork() || runningElsewhere()) {
             return new Outcome(Result.SKIPPED, 0);
         }
         events.publish("recalc.started", Map.of("trigger", trigger));
@@ -126,10 +127,7 @@ public class RecalcService {
                         step.modelVersion());
                 yield new Outcome(Result.OK, step.accounts());
             }
-            case "idle" -> {
-                events.publish("recalc.completed", Map.of("accountsProcessed", 0));
-                yield new Outcome(Result.IDLE, 0);
-            }
+            case "idle" -> new Outcome(Result.IDLE, 0);
             default -> {
                 log.debug("recalculation is running in another instance: trigger={}", trigger);
                 yield new Outcome(Result.BUSY, 0);
@@ -141,26 +139,32 @@ public class RecalcService {
         boolean concurrent = isSerializationFailure(failure);
         String error = concurrent ? "concurrent" : truncate(rootMessage(failure));
         if (concurrent) {
-            log.info("recalculation conflicted with a concurrent change and will be retried: trigger={}", trigger);
+            log.info("recalculation conflicted with a concurrent change: trigger={}", trigger);
         } else {
             log.error("recalculation failed: trigger={}", trigger, failure);
         }
+        Long runId = null;
         try {
-            jdbc.sql(
-                            "INSERT INTO public.recalc_runs (trigger, started_at, finished_at, as_of, model_version, status, error)"
-                                    + " SELECT :trigger, now(), now(), public.model_now(),"
-                                    + " (SELECT max(version) FROM public.model_revisions), 'failed', :error")
+            runId = jdbc.sql("INSERT INTO public.recalc_runs"
+                            + " (trigger, started_at, finished_at, as_of, model_version, status, error)"
+                            + " SELECT :trigger, now(), now(), public.model_now(),"
+                            + " (SELECT max(version) FROM public.model_revisions), 'failed', :error RETURNING id")
                     .param("trigger", trigger)
                     .param("error", error)
-                    .update();
+                    .query(Long.class)
+                    .single();
         } catch (RuntimeException e) {
             log.warn("failed run was not recorded: {}", e.getMessage());
         }
-        events.publish("recalc.failed", Map.of("trigger", trigger, "error", error));
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("runId", runId);
+        event.put("trigger", trigger);
+        event.put("error", error);
+        events.publish("recalc.failed", event);
         return new Outcome(Result.FAILED, 0);
     }
 
-    private static boolean isSerializationFailure(Throwable failure) {
+    static boolean isSerializationFailure(Throwable failure) {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
             if (cause instanceof SQLException sql && SERIALIZATION_FAILURE.equals(sql.getSQLState())) {
                 return true;
@@ -178,7 +182,8 @@ public class RecalcService {
     }
 
     private static String truncate(String text) {
-        return text.length() > MAX_ERROR_LENGTH ? text.substring(0, MAX_ERROR_LENGTH) : text;
+        String line = text.lines().findFirst().orElse(text).replaceFirst("^ERROR:\\s*", "");
+        return line.length() > MAX_ERROR_LENGTH ? line.substring(0, MAX_ERROR_LENGTH) : line;
     }
 
     private static Run mapRun(java.sql.ResultSet rs, int row) throws SQLException {

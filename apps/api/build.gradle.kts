@@ -45,6 +45,7 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("no.nav.security:mock-oauth2-server:2.2.1")
+    testImplementation("org.postgresql:postgresql")
     testImplementation("io.swagger.parser.v3:swagger-parser:2.1.48")
     testRuntimeOnly("javax.xml.bind:jaxb-api:2.3.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

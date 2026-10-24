@@ -725,7 +725,8 @@ BEGIN
     UPDATE public.recalc_runs r
     SET status='ok', finished_at=now(), accounts_processed=v_count WHERE r.id=v_run;
     PERFORM pg_notify('churn_events', json_build_object(
-        'type','recalc.completed','at',now(),'modelVersion',v_version,'accountsProcessed',v_count
+        'type','recalc.completed','at',now(),'runId',v_run,'trigger',p_trigger,
+        'accountsProcessed',v_count,'modelVersion',v_version,'asOf',v_as_of,'finishedAt',now()
     )::text);
     RETURN QUERY SELECT v_run, 'ok'::text, v_count, v_version, v_as_of;
 END

@@ -117,4 +117,48 @@ class RecalcSchedulerTest {
         verify(service, never()).run(anyString());
         scheduler.stop();
     }
+
+    @Test
+    void anErrorInsideARunStillReleasesTheScheduler() {
+        RecalcService service = mock(RecalcService.class);
+        AtomicInteger calls = new AtomicInteger();
+        when(service.run(anyString())).thenAnswer(call -> {
+            if (calls.incrementAndGet() == 1) {
+                throw new AssertionError("fatal");
+            }
+            return DONE;
+        });
+        RecalcScheduler scheduler = new RecalcScheduler(service, properties(false, Duration.ofMinutes(1)));
+
+        scheduler.requestNow("manual");
+        await().atMost(Duration.ofSeconds(5)).until(() -> !scheduler.isRunning());
+
+        assertThat(scheduler.requestNow("manual")).isEqualTo(RecalcScheduler.State.SCHEDULED);
+        scheduler.stop();
+    }
+
+    @Test
+    void aTimerTickDoesNotReplaceAMoreSpecificPendingTrigger() throws Exception {
+        RecalcService service = mock(RecalcService.class);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(service.run(anyString())).thenReturn(DONE);
+        when(service.run("ingest")).thenAnswer(call -> {
+            entered.countDown();
+            release.await(10, TimeUnit.SECONDS);
+            return DONE;
+        });
+        RecalcScheduler scheduler = new RecalcScheduler(service, properties(false, Duration.ofMinutes(1)));
+
+        scheduler.requestNow("ingest");
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+        scheduler.requestNow("manual");
+        scheduler.requestNow("timer");
+        release.countDown();
+
+        await().atMost(Duration.ofSeconds(5)).until(() -> !scheduler.isRunning());
+        verify(service).run("manual");
+        verify(service, never()).run("timer");
+        scheduler.stop();
+    }
 }

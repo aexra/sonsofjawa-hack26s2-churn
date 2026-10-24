@@ -16,7 +16,6 @@ final class RecalcSupport {
         jdbc.execute("truncate transactions, services, accounts");
         jdbc.update("delete from delta");
         jdbc.update("delete from service_status_history");
-        jdbc.update("delete from service_status_history");
         jdbc.update("delete from analytics_snapshots");
         jdbc.update("delete from scores");
         jdbc.update("delete from recalc_runs");

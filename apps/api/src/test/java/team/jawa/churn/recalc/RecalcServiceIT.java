@@ -1,9 +1,11 @@
 package team.jawa.churn.recalc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import java.sql.Connection;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.List;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
@@ -128,7 +130,7 @@ class RecalcServiceIT extends IntegrationTest {
 
             RecalcService.Outcome blocked = service.run("manual");
 
-            assertThat(blocked.result()).isEqualTo(RecalcService.Result.BUSY);
+            assertThat(blocked.result()).isEqualTo(RecalcService.Result.SKIPPED);
             assertThat(service.runningElsewhere()).isTrue();
             assertThat(jdbc.queryForObject("select count(*) from scores", Integer.class))
                     .isZero();
@@ -140,14 +142,18 @@ class RecalcServiceIT extends IntegrationTest {
     }
 
     @Test
-    void expiredScoresAreQueuedByTimeAndRecalculated() throws Exception {
-        loadFrozenReferenceData();
-        service.run("manual");
-        jdbc.update("update scores set valid_until = model_now() - interval '1 minute' where account_id = 5");
+    void scoresThatExpireWithTheShiftedClockAreQueuedByTime() throws Exception {
+        jdbc.update(
+                "update model_clock set mode = 'shifted', frozen_at = null, shift = now() - ?::timestamptz",
+                RecalcSupport.AS_OF);
+        RecalcSupport.loadReferenceData(jdbc);
+        assertThat(service.run("manual")).isEqualTo(new RecalcService.Outcome(RecalcService.Result.OK, 10));
+        assertThat(service.run("timer").result()).isEqualTo(RecalcService.Result.SKIPPED);
+        jdbc.update("update scores set valid_until = model_now() + interval '1 second' where account_id = 5");
 
-        RecalcService.Outcome outcome = service.run("timer");
+        await().atMost(Duration.ofSeconds(10))
+                .until(() -> service.run("timer").equals(new RecalcService.Outcome(RecalcService.Result.OK, 1)));
 
-        assertThat(outcome).isEqualTo(new RecalcService.Outcome(RecalcService.Result.OK, 1));
         assertThat(jdbc.queryForObject(
                         "select count(*) from delta where reason = 'time' and account_id = 5", Integer.class))
                 .isEqualTo(1);
@@ -158,13 +164,61 @@ class RecalcServiceIT extends IntegrationTest {
     }
 
     @Test
+    void eventsCarryTheRunDetailsAndOnlyAppearWhenThereIsWork() throws Exception {
+        loadFrozenReferenceData();
+        try (RecalcEvents events = new RecalcEvents(dataSource)) {
+            service.run("manual");
+            List<String> received = events.collect(500);
+
+            assertThat(received).hasSize(2);
+            assertThat(received.get(0)).contains("\"type\":\"recalc.started\"", "\"trigger\":\"manual\"");
+            assertThat(received.get(1).replace(" ", ""))
+                    .contains("\"type\":\"recalc.completed\"", "\"trigger\":\"manual\"")
+                    .contains("\"runId\":", "\"accountsProcessed\":10", "\"modelVersion\":")
+                    .contains("\"asOf\":", "\"finishedAt\":");
+
+            service.run("timer");
+            assertThat(events.collect(300)).hasSize(2);
+        }
+    }
+
+    @Test
+    void aBusyRunPublishesNothing() throws Exception {
+        loadFrozenReferenceData();
+        try (RecalcEvents events = new RecalcEvents(dataSource);
+                Connection other = dataSource.getConnection();
+                Statement statement = other.createStatement()) {
+            other.setAutoCommit(false);
+            statement.execute("select pg_advisory_xact_lock(hashtext('churn.recalc'))");
+
+            RecalcService.Outcome outcome = service.run("manual");
+
+            assertThat(outcome.result()).isEqualTo(RecalcService.Result.SKIPPED);
+            assertThat(events.collect(300)).isEmpty();
+            other.rollback();
+        }
+    }
+
+    @Test
     void aFailedRunIsRecordedAndDoesNotLeaveARunningRow() throws Exception {
         loadFrozenReferenceData();
         jdbc.update("delete from model_revisions");
-
-        RecalcService.Outcome outcome = service.run("manual");
+        List<String> received;
+        RecalcService.Outcome outcome;
+        try (RecalcEvents events = new RecalcEvents(dataSource)) {
+            outcome = service.run("manual");
+            received = events.collect(500);
+        }
 
         try {
+            assertThat(received).hasSize(2);
+            assertThat(received.get(0)).contains("\"type\":\"recalc.started\"");
+            assertThat(received.get(1))
+                    .contains(
+                            "\"type\":\"recalc.failed\"",
+                            "\"trigger\":\"manual\"",
+                            "\"error\":\"risk model requires a revision");
+            assertThat(received.get(1)).containsPattern("\"runId\":\\d+");
             assertThat(outcome.result()).isEqualTo(RecalcService.Result.FAILED);
             assertThat(jdbc.queryForMap("select trigger, status, error from recalc_runs"))
                     .containsEntry("trigger", "manual")
