@@ -7,6 +7,7 @@ variables:
   KANIKO_IMAGE: ${NEXUS_PULL_REGISTRY}/kaniko-project/executor:debug
   IMAGE_API: ${NEXUS_PUSH_REGISTRY}/hack26s2/api:dev
   IMAGE_APP: ${NEXUS_PUSH_REGISTRY}/hack26s2/app:dev
+  IMAGE_MCP: ${NEXUS_PUSH_REGISTRY}/hack26s2/mcp:dev
   CHURN_HOST: "10.6.7.100"
   CHURN_DIR: "/home/aexra/.modules/churn"
 
@@ -49,6 +50,19 @@ build-app:
       --build-arg "NPM_REGISTRY=${NEXUS_NPM_REGISTRY}"
       --verbosity info
 
+build-mcp:
+  extends: .kaniko
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}/apps/mcp"
+      --dockerfile "${CI_PROJECT_DIR}/apps/mcp/Dockerfile"
+      --destination "${IMAGE_MCP}"
+      --snapshot-mode=redo
+      --build-arg "BASE_REGISTRY=${NEXUS_PULL_REGISTRY}"
+      --build-arg "PIP_INDEX_URL=https://nexus.aexra.ru/repository/pypi/simple"
+      --verbosity info
+
 deploy:
   stage: deploy
   image: ${NEXUS_PULL_REGISTRY}/library/alpine:3.20
@@ -59,6 +73,7 @@ deploy:
   needs:
     - build-api
     - build-app
+    - build-mcp
   before_script:
     - apk add --no-cache openssh-client bash
     - mkdir -p ~/.ssh

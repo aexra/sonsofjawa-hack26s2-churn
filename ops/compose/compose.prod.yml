@@ -43,3 +43,25 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  mcp:
+    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/mcp:dev
+    container_name: churn-mcp
+    restart: unless-stopped
+    networks:
+      - nginx
+    environment:
+      CHURN_API_URL: http://churn-api:8080
+      MCP_PORT: "8090"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=2)
+      interval: 5s
+      timeout: 3s
+      retries: 10
