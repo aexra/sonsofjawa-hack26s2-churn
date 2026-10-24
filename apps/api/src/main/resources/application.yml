@@ -29,6 +29,13 @@ management:
       probes:
         enabled: false
 
+recalc:
+  enabled: ${RECALC_ENABLED:true}
+  interval: ${RECALC_INTERVAL:1m}
+  scores-retention: ${SCORES_RETENTION:90d}
+  delta-retention: ${DELTA_RETENTION:7d}
+  maintenance-cron: ${MAINTENANCE_CRON:0 30 3 * * *}
+
 logging:
   level:
     root: ${LOG_LEVEL:INFO}

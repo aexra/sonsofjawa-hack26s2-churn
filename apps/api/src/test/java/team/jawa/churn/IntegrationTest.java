@@ -17,7 +17,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
         properties = {
             "auth.jwt-secret=test-secret-test-secret-test-secret-1234",
             "auth.bootstrap-admin-password=admin12345",
-            "auth.bootstrap-user-password=analyst12345"
+            "auth.bootstrap-user-password=analyst12345",
+            "recalc.enabled=false"
         })
 public abstract class IntegrationTest {
 

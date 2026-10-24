@@ -667,7 +667,7 @@ DECLARE
     v_version bigint;
     v_as_of timestamptz;
 BEGIN
-    IF p_trigger IS NULL OR p_trigger NOT IN ('timer', 'manual', 'model', 'snapshot', 'ingest', 'notify') THEN
+    IF p_trigger IS NULL OR p_trigger NOT IN ('timer', 'manual', 'model', 'snapshot', 'ingest') THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'unknown recalculation trigger';
     END IF;
     IF current_setting('transaction_isolation') NOT IN ('repeatable read', 'serializable') THEN
