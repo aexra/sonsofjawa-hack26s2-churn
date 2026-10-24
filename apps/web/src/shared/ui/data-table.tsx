@@ -19,6 +19,7 @@ interface DataColumn<Row> {
   sortable?: boolean;
   align?: 'left' | 'right';
   mono?: boolean;
+  clamp?: boolean;
   render?: (row: Row) => ReactNode;
 }
 
@@ -89,18 +90,18 @@ export function DataTable<Row>({
                         type="button"
                         onClick={() => onSort?.(header.column.id, nextDirection(dir))}
                         className={cn(
-                          'flex h-9 w-full cursor-pointer items-center gap-1 px-3 hover:text-ink',
+                          'flex h-9 w-full cursor-pointer items-center gap-1 px-3.5 hover:text-ink',
                           column.align === 'right' && 'justify-end',
                           dir && 'text-ink',
                         )}
                       >
                         {label}
-                        <Icon aria-hidden="true" className="size-3.5" />
+                        <Icon aria-hidden="true" className="size-3" />
                       </button>
                     ) : (
                       <span
                         className={cn(
-                          'flex h-9 items-center px-3',
+                          'flex h-9 items-center px-3.5',
                           column?.align === 'right' && 'justify-end',
                         )}
                       >
@@ -138,12 +139,18 @@ export function DataTable<Row>({
                   <td
                     key={cell.id}
                     className={cn(
-                      'h-row border-b border-line px-3 align-middle group-last:border-b-0',
+                      'h-row border-b border-line px-3.5 align-middle group-last:border-b-0',
                       column?.align === 'right' && 'text-right tabular-nums',
                       column?.mono && 'font-mono text-data whitespace-nowrap tabular-nums',
                     )}
                   >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    {column?.clamp ? (
+                      <div className="line-clamp-2 max-w-85">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </div>
+                    ) : (
+                      flexRender(cell.column.columnDef.cell, cell.getContext())
+                    )}
                   </td>
                 );
               })}

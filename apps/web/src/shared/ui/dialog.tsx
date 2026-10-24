@@ -9,7 +9,7 @@ export const dialogOverlayClass = 'fixed inset-0 z-50 bg-scrim';
 export const dialogContentClass =
   'fixed top-1/2 left-1/2 z-50 box-border flex w-110 max-w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-md border border-line bg-surface p-6 shadow-pop';
 
-export const dialogTitleClass = 'm-0 font-display text-[17px] leading-6 font-semibold';
+export const dialogTitleClass = 'm-0 font-display text-heading';
 
 interface DialogProps {
   open: boolean;

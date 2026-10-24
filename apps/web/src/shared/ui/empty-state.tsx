@@ -1,6 +1,6 @@
 import { CircleAlert, CircleMinus, Inbox, SearchX, ShieldAlert } from 'lucide-react';
 
-import { cn } from '@/shared/lib/cn';
+import { IconTile } from './icon-tile';
 
 import type { ReactNode } from 'react';
 
@@ -27,14 +27,8 @@ export function EmptyState({ kind, title, text, action }: EmptyStateProps) {
       role={isError ? 'alert' : undefined}
       className="flex flex-col items-center gap-2 px-6 py-10 text-center"
     >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'mb-2 grid size-10 place-items-center rounded-md',
-          isError ? 'bg-risk-high-soft text-negative' : 'bg-surface-sunken text-ink-muted',
-        )}
-      >
-        <Icon className="size-5" />
+      <span className="mb-2">
+        <IconTile icon={Icon} size={48} tone={isError ? 'danger' : 'default'} />
       </span>
       <h2 className="m-0 font-display text-heading">{title}</h2>
       {text && <p className="m-0 max-w-[48ch] text-ink-muted">{text}</p>}

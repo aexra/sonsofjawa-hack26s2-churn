@@ -18,7 +18,7 @@ export function Tabs({ items, value, onValueChange, label, children }: TabsProps
           <TabsPrimitive.Trigger
             key={item.id}
             value={item.id}
-            className="-mb-px h-control-md cursor-pointer rounded-t-sm border-b-2 border-transparent px-3 text-body-strong text-ink-muted transition-colors duration-120 ease-out hover:text-ink data-[state=active]:border-accent data-[state=active]:text-accent"
+            className="-mb-px h-control-md cursor-pointer rounded-t-sm border-b-2 border-transparent px-3 text-body-strong text-ink-muted transition-colors duration-120 ease-out hover:text-ink data-[state=active]:border-accent data-[state=active]:text-ink"
           >
             {item.label}
           </TabsPrimitive.Trigger>

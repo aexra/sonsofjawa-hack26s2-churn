@@ -16,7 +16,7 @@ const badge = cva('inline-flex items-center gap-1 rounded-xs text-label whitespa
       pending: 'bg-risk-none-soft text-risk-none',
     },
     size: {
-      md: 'h-5.5 pr-2 pl-1.5',
+      md: 'h-6 pr-2 pl-1.5',
       lg: 'h-7 pr-3 pl-2 text-[13px]',
     },
   },
