@@ -56,9 +56,11 @@ class ApplicationIT {
 
     @Test
     void otherPathsAreDenied() throws Exception {
-        HttpResponse<String> response = get("/api/v1/customers");
+        for (String path : new String[] {"/api/v1/customers", "/metrics"}) {
+            HttpResponse<String> response = get(path);
 
-        assertThat(response.statusCode()).isIn(401, 403);
-        assertThat(response.body()).isEmpty();
+            assertThat(response.statusCode()).isIn(401, 403);
+            assertThat(response.body()).isEmpty();
+        }
     }
 }
