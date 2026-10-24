@@ -1,0 +1,13 @@
+import { cn } from '@/shared/lib/cn';
+
+import type { ComponentProps } from 'react';
+
+export function Skeleton({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn('animate-pulse rounded-sm bg-surface-sunken', className)}
+      {...props}
+    />
+  );
+}

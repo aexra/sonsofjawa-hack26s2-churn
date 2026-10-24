@@ -6,7 +6,11 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 export const server = setupServer();
 
 Object.assign(window, {
-  __APP_CONFIG__: { apiBaseUrl: '/api/v1', docsUrl: '/api/v1/docs', grafanaUrl: '' },
+  __APP_CONFIG__: {
+    apiBaseUrl: 'http://localhost:3000/api/v1',
+    docsUrl: '/api/v1/docs',
+    grafanaUrl: '',
+  },
 });
 
 beforeAll(() => {

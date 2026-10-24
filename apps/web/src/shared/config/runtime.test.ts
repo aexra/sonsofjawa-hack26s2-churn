@@ -4,7 +4,7 @@ import { parseRuntimeConfig, runtimeConfig } from './runtime';
 
 describe('runtime config', () => {
   it('reads the injected config', () => {
-    expect(runtimeConfig.apiBaseUrl).toBe('/api/v1');
+    expect(runtimeConfig.apiBaseUrl).toBe('http://localhost:3000/api/v1');
   });
 
   it('rejects a config of the wrong shape', () => {

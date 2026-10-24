@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@import '@fontsource-variable/roboto';
+@import './theme.css';
 @import '@fontsource-variable/montserrat';
+@import '@fontsource-variable/golos-text';
 @import '@fontsource-variable/jetbrains-mono';
