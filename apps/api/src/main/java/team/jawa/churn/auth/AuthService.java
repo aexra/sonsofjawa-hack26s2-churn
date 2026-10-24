@@ -42,16 +42,17 @@ public class AuthService {
             throw new ApiException(HttpStatus.FORBIDDEN, "local_auth_disabled", "local authentication is disabled");
         }
         String normalized = login.strip().toLowerCase(Locale.ROOT);
+        String logged = normalized.replaceAll("[\\r\\n]", "_");
         Optional<UserAccount> found = users.findByLogin(normalized).filter(user -> "local".equals(user.authProvider()));
         boolean passwordMatches =
                 encoder.matches(password, found.map(UserAccount::passwordHash).orElse(absentUserHash));
         if (found.isEmpty() || !passwordMatches) {
-            log.warn("login failed: login={} ip={}", normalized, remoteAddress);
+            log.warn("login failed: login={} ip={}", logged, remoteAddress);
             throw new ApiException(HttpStatus.UNAUTHORIZED, "invalid_credentials", "invalid login or password");
         }
         UserAccount user = found.get();
         if (!user.enabled()) {
-            log.warn("login rejected for disabled account: login={} ip={}", normalized, remoteAddress);
+            log.warn("login rejected for disabled account: login={} ip={}", logged, remoteAddress);
             throw new ApiException(HttpStatus.FORBIDDEN, "account_disabled", "account is disabled");
         }
         users.touchLastLogin(user.id());

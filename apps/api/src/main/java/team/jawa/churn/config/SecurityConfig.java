@@ -72,6 +72,7 @@ class SecurityConfig {
                                 "/api/v1/events",
                                 "/api/v1/docs/**",
                                 "/api/v1/swagger-ui/**",
+                                "/v3/api-docs/swagger-config",
                                 "/api/v1/openapi.yaml")
                         .hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/model/settings")

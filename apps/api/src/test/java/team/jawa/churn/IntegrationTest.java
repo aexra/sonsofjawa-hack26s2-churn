@@ -62,6 +62,15 @@ public abstract class IntegrationTest {
             return send(builder.POST(HttpRequest.BodyPublishers.ofString(json)).build());
         }
 
+        public HttpResponse<String> postWithHeader(String path, String json, String header, String value)
+                throws IOException, InterruptedException {
+            return send(request(path)
+                    .header("Content-Type", "application/json")
+                    .header(header, value)
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build());
+        }
+
         public java.util.Optional<String> cookie(String name) {
             return cookies.getCookieStore().getCookies().stream()
                     .filter(c -> c.getName().equals(name))

@@ -177,6 +177,23 @@ class AuthIT extends IntegrationTest {
     }
 
     @Test
+    void swaggerConfigIsServedAfterLoginButGeneratedSpecIsNot() throws Exception {
+        Client client = loggedIn(ANALYST_LOGIN);
+
+        assertThat(client.get("/v3/api-docs/swagger-config").statusCode()).isEqualTo(200);
+        assertThat(client.get("/v3/api-docs").statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void csrfIsNotCheckedForRequestsWithAuthorizationHeader() throws Exception {
+        HttpResponse<String> response =
+                client().postWithHeader("/api/v1/auth/logout", "", "Authorization", "Bearer ck_unknown");
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(response.body()).contains("\"code\":\"unauthenticated\"");
+    }
+
+    @Test
     void servedSpecificationMatchesRepositoryFile() throws Exception {
         Client client = loggedIn(ANALYST_LOGIN);
 
