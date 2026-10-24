@@ -609,3 +609,91 @@ BEGIN
     RETURN v_version;
 END
 $$;
+
+CREATE OR REPLACE FUNCTION public.delta_from_accounts() RETURNS trigger
+    LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        INSERT INTO public.delta (account_id, reason) SELECT DISTINCT id, 'accounts' FROM new_rows;
+    END IF;
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        INSERT INTO public.delta (account_id, reason) SELECT DISTINCT id, 'accounts' FROM old_rows;
+    END IF;
+    RETURN NULL;
+END
+$$;
+
+DROP TRIGGER IF EXISTS accounts_delta_upd ON public.accounts;
+CREATE TRIGGER accounts_delta_upd AFTER UPDATE ON public.accounts
+    REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+    FOR EACH STATEMENT EXECUTE FUNCTION public.delta_from_accounts();
+
+CREATE OR REPLACE FUNCTION public.recalculate_risk(p_trigger text DEFAULT 'manual')
+    RETURNS TABLE (run_id bigint, status text, accounts_processed integer, model_version bigint, as_of timestamptz)
+    LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_run bigint;
+    v_count integer;
+    v_version bigint;
+    v_as_of timestamptz;
+BEGIN
+    IF p_trigger IS NULL OR p_trigger NOT IN ('timer', 'manual', 'model', 'snapshot', 'ingest', 'notify') THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'unknown recalculation trigger';
+    END IF;
+    IF current_setting('transaction_isolation') NOT IN ('repeatable read', 'serializable') THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'risk recalculation requires a repeatable read or serializable transaction';
+    END IF;
+    SELECT public.model_now(), max(r.version) INTO v_as_of, v_version FROM public.model_revisions r;
+    IF NOT pg_try_advisory_xact_lock(hashtext('churn.recalc')) THEN
+        RETURN QUERY SELECT NULL::bigint, 'busy'::text, 0, v_version, v_as_of;
+        RETURN;
+    END IF;
+    INSERT INTO public.delta (account_id, reason)
+    SELECT s.account_id, 'time' FROM public.scores s
+    WHERE s.is_current AND s.valid_until <= v_as_of
+      AND NOT EXISTS (SELECT 1 FROM public.delta d WHERE d.account_id=s.account_id AND d.proc_date IS NULL);
+    SELECT count(DISTINCT d.account_id)::integer INTO v_count FROM public.delta d WHERE d.proc_date IS NULL;
+    IF v_count = 0 THEN
+        RETURN QUERY SELECT NULL::bigint, 'idle'::text, 0, v_version, v_as_of;
+        RETURN;
+    END IF;
+    INSERT INTO public.recalc_runs (trigger, started_at, as_of, model_version, status)
+    VALUES (p_trigger, now(), v_as_of, v_version, 'running') RETURNING id INTO v_run;
+    UPDATE public.scores s SET is_current=false
+    WHERE s.is_current AND s.account_id IN (SELECT d.account_id FROM public.delta d WHERE d.proc_date IS NULL);
+    INSERT INTO public.scores (
+        account_id, calculated_at, as_of, model_version, status, no_score_reason,
+        risk_score, risk_level, revenue_horizon, secured_amount, expected_loss,
+        services_total, services_live, services_at_risk, next_expiry_at,
+        reasons, features, anomalies, valid_until, is_current
+    )
+    SELECT s.account_id, s.calculated_at, s.as_of, s.model_version, s.status, s.no_score_reason,
+           s.risk_score, s.risk_level, s.revenue_horizon, s.secured_amount, s.expected_loss,
+           s.services_total, s.services_live, s.services_at_risk, s.next_expiry_at,
+           s.reasons, s.features, s.anomalies, s.valid_until, s.is_current
+    FROM public.scores_delta_vw s;
+    UPDATE public.delta d SET proc_date=now() WHERE d.proc_date IS NULL;
+    INSERT INTO public.analytics_snapshots (
+        recalc_run_id, calculated_at, as_of, model_version,
+        accounts_high, accounts_medium, accounts_low, accounts_no_score,
+        expected_loss, revenue_horizon, revenue_at_risk, services_at_risk, avg_risk_score
+    )
+    SELECT v_run, now(), v_as_of, v_version,
+           count(*) FILTER (WHERE s.risk_level='high'),
+           count(*) FILTER (WHERE s.risk_level='medium'),
+           count(*) FILTER (WHERE s.risk_level='low'),
+           count(*) FILTER (WHERE s.status='no_score'),
+           coalesce(sum(s.expected_loss),0), coalesce(sum(s.revenue_horizon),0),
+           coalesce(sum(s.revenue_horizon) FILTER (WHERE s.risk_level='high'),0),
+           coalesce(sum(s.services_at_risk),0), round(avg(s.risk_score),2)
+    FROM public.scores s WHERE s.is_current AND s.status <> 'removed';
+    UPDATE public.recalc_runs r
+    SET status='ok', finished_at=now(), accounts_processed=v_count WHERE r.id=v_run;
+    PERFORM pg_notify('churn_events', json_build_object(
+        'type','recalc.completed','at',now(),'modelVersion',v_version,'accountsProcessed',v_count
+    )::text);
+    RETURN QUERY SELECT v_run, 'ok'::text, v_count, v_version, v_as_of;
+END
+$$;
