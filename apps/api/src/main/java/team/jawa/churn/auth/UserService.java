@@ -1,7 +1,6 @@
 package team.jawa.churn.auth;
 
 import java.util.List;
-import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -35,17 +34,16 @@ public class UserService {
     @Transactional
     public UserAccount create(
             String login, String password, String role, String email, String displayName, String actor) {
-        String normalized = login.strip().toLowerCase(Locale.ROOT);
-        if (users.findByLogin(normalized).isPresent()) {
+        if (users.findByLogin(login).isPresent()) {
             throw loginTaken();
         }
         long id;
         try {
-            id = users.insertLocal(normalized, displayName, email, role, encoder.encode(password));
+            id = users.insertLocal(login, displayName, email, role, encoder.encode(password));
         } catch (DuplicateKeyException e) {
             throw loginTaken();
         }
-        log.info("user created: login={} role={} by={}", normalized, role, actor);
+        log.info("user created: login={} role={} by={}", login, role, actor);
         return users.findById(id).orElseThrow();
     }
 

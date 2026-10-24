@@ -64,7 +64,7 @@ class BootstrapAdminRunner implements ApplicationRunner {
         if (users.findByLogin(login).isPresent()) {
             return;
         }
-        users.insertLocal(login, login, role, encoder.encode(password));
+        users.insertLocal(login, login, null, role, encoder.encode(password));
         log.info("bootstrap user created: login={} role={}", login, role);
     }
 

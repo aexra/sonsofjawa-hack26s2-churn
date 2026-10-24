@@ -41,10 +41,6 @@ public class UserRepository {
                 .single();
     }
 
-    public long insertLocal(String login, String displayName, String role, String passwordHash) {
-        return insertLocal(login, displayName, null, role, passwordHash);
-    }
-
     public long insertLocal(String login, String displayName, String email, String role, String passwordHash) {
         return jdbc.sql("INSERT INTO public.users (login, display_name, email, role, auth_provider, password_hash)"
                         + " VALUES (:login, :displayName, :email, :role, 'local', :passwordHash) RETURNING id")

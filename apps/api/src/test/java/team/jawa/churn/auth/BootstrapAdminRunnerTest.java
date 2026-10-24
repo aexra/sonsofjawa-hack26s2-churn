@@ -39,7 +39,7 @@ class BootstrapAdminRunnerTest {
 
         runner("", "https://idp.example/realms/r").run(null);
 
-        verify(users, never()).insertLocal(any(), any(), any(), any());
+        verify(users, never()).insertLocal(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -58,7 +58,7 @@ class BootstrapAdminRunnerTest {
 
         runner("admin12345", "").run(null);
 
-        verify(users).insertLocal("admin", "admin", "admin", "admin12345");
+        verify(users).insertLocal("admin", "admin", null, "admin", "admin12345");
     }
 
     @Test
@@ -67,6 +67,6 @@ class BootstrapAdminRunnerTest {
 
         runner("admin12345", "").run(null);
 
-        verify(users, never()).insertLocal(any(), any(), any(), any());
+        verify(users, never()).insertLocal(any(), any(), any(), any(), any());
     }
 }
