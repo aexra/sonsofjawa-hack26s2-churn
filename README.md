@@ -16,6 +16,8 @@
 10. [Интеграция для систем-источников](#10-интеграция-для-систем-источников)
 11. [Разработка](#11-разработка)
 12. [Переменные среды](#12-переменные-среды)
+13. [Демонстрация в реальном времени](#13-демонстрация-в-реальном-времени)
+14. [Потребление ресурсов](#14-потребление-ресурсов)
 
 ## 1. Что это
 
@@ -407,12 +409,13 @@ npx lefthook install   # git-хуки
 Структура репозитория:
 
 ```
-apps/api/        Spring Boot: REST API, пересчёт, миграции БД (Flyway), модель риска в R__risk_model.sql
-apps/web/        React SPA: панель и nginx для раздачи
-apps/mcp/        вспомогательный сервис поверх API
-ops/             Compose-файлы, сиды, генератор демо-данных (см. ops/README.md)
-openapi.yaml     контракт API
-Makefile         точка входа для всех команд
+apps/api/           Spring Boot: REST API, пересчёт, миграции БД (Flyway), модель риска в R__risk_model.sql
+apps/web/           React SPA: панель и nginx для раздачи
+apps/mcp/           вспомогательный сервис поверх API
+ops/                Compose-файлы, сиды, генератор демо-данных (см. ops/README.md)
+churn_demo_feed/    DAG Apache Airflow: инкрементальная демо-лента в Postgres (см. раздел 13)
+openapi.yaml        контракт API
+Makefile            точка входа для всех команд
 ```
 
 ## 12. Переменные среды
@@ -488,3 +491,46 @@ Makefile         точка входа для всех команд
 | `GRADLE_MIRROR` | зеркало Maven-репозиториев; пусто — Maven Central | пусто |
 | `PIP_INDEX_URL` | индекс Python-пакетов | `https://pypi.org/simple` |
 | `IMAGE_REGISTRY` / `IMAGE_TAG` | куда и под каким тегом собирать образы | `churn` / `local` |
+
+## 13. Демонстрация в реальном времени
+
+Живая проверка панели: данные непрерывно появляются в базе, пересчёт подхватывает дельту, дашборд обновляется без перезагрузки страницы.
+
+1. **Генерация.** DAG `churn_demo_feed` в **Apache Airflow 3.3.2** (каталог [`churn_demo_feed/`](churn_demo_feed/) в этом репозитории) каждые 5 минут пишет в Postgres инкремент: новые сценарийные аккаунты, услуги на существующих владельцах, события `prolong`. Семантика совпадает с `ops/scripts/generate_demo.py`. Подключение Airflow: connection id `churn_postgres`.
+2. **Пересчёт.** Триггеры на `accounts` / `services` / `transactions` кладут затронутых клиентов в `delta`; таймер `api` (или `POST /api/v1/recalc`) пересчитывает оценки и шлёт `NOTIFY`.
+3. **Панель.** Браузер держит `GET /api/v1/events` (SSE). По `recalc.completed` SPA перечитывает обзор, рейтинг и открытые карточки — KPI, уровни риска и график меняются на глазах, пока крутится лента Airflow.
+
+Так же прогонялась живая среда: открытый обзор + работающий DAG — числа на дашборде двигаются в реальном времени.
+
+## 14. Потребление ресурсов
+
+Замер на развёрнутом стенде (~490 аккаунтов, БД `churn` ≈ 16 MB): idle 5 мин, лёгкая нагрузка чтения API ~1.2–1.4 RPS через HTTPS 8 мин, один `POST /api/v1/recalc?scope=all`. Снимали `docker stats`, latency curl и метрики Prometheus (`jvm_*`, `churn_recalc_*`).
+
+**Память и CPU контейнеров**
+
+| Сервис | Idle RSS avg / max | Load RSS avg / max | Idle CPU avg / max | Load CPU avg / max |
+|---|---|---|---|---|
+| `churn-api` | 490 / 492 MiB | 511 / **520** MiB | 1.0% / 7.9% | 3.6% / **16.8%** |
+| `churn-web` | 11 / 12 MiB | 12 / 16 MiB | 0.6% / 2.8% | 0.6% / 7.3% |
+| `churn-mcp` | 55 / 64 MiB | 57 / 72 MiB | 5.5% / 28.6%* | 4.8% / 28.7%* |
+| `postgres` (весь контейнер) | 101 / 102 MiB | 106 / 115 MiB | 1.0% / 5.9% | 2.5% / 10.1% |
+
+\* У `churn-mcp` периодические пики CPU ~25% даже в idle при низком среднем.
+
+Сумма RSS api+web+mcp под нагрузкой ≈ **580–610 MiB**; с долей Postgres под `churn` рабочий набор платформы ≈ **0.7 GiB**.
+
+**JVM (Prometheus):** used heap ~163–249 MiB, committed ~337–347 MiB. Без memory limit у контейнера `jvm_memory_max` heap раздувается до размера хоста (~25 GiB) — ориентироваться нужно на RSS, а в проде задать limits.
+
+**Latency чтения API** (555 запросов, все 200; p50 / p95):
+
+| Endpoint | p50 | p95 |
+|---|---|---|
+| `GET /analytics/summary` | 370 ms | 502 ms |
+| `GET /customers` (список / фильтр) | ~400–450 ms | ~670 ms |
+| `GET /customers/{id}` | ~310–400 ms | ~480–600 ms |
+| `GET /analytics/churn-chart` | 526 ms | 722 ms |
+| `GET /recalc/status` | 336 ms | 564 ms |
+
+**Full recalc** `scope=all` на 492 аккаунтах: `churn_recalc_duration_seconds_max{trigger="manual"}` ≈ **3.53 s**; RSS api после ≈ 524 MiB; короткий пик CPU Postgres.
+
+**Рекомендация на выделенный хост при ~500 клиентах:** min **1.5 GiB / 1 vCPU**, recommended **4 GiB / 2 vCPU** (limits: api 1 GiB, postgres 1 GiB, web 64 MiB, mcp 128 MiB). Важнее выставить memory limits контейнерам, чем наращивать RAM «на глаз». Экстраполяция recalc ≈ 7 ms на аккаунт (5k — десятки секунд, 50k — отдельный прогон).
