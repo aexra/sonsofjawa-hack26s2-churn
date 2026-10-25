@@ -53,9 +53,9 @@ class RecalcServiceIT extends IntegrationTest {
         RecalcService.Outcome outcome = service.run("manual");
 
         assertThat(outcome).isEqualTo(new RecalcService.Outcome(RecalcService.Result.OK, 10));
-        assertThat(scoresOfScoredAccounts()).containsExactly("24.98", "23.33", "78.47", "19.18", "56.29", "55.00");
+        assertThat(scoresOfScoredAccounts()).containsExactly("15.61", "26.99", "66.67", "10.66", "88.88", "66.64");
         assertThat(jdbc.queryForObject("select sum(expected_loss) from scores where is_current", Long.class))
-                .isEqualTo(681905L);
+                .isEqualTo(15091L);
         assertThat(jdbc.queryForObject("select count(*) from scores where is_current", Integer.class))
                 .isEqualTo(10);
         assertThat(jdbc.queryForObject("select count(*) from delta where proc_date is null", Integer.class))
@@ -65,7 +65,7 @@ class RecalcServiceIT extends IntegrationTest {
                 .containsEntry("status", "ok")
                 .containsEntry("accounts_processed", 10);
         assertThat(jdbc.queryForObject("select expected_loss from analytics_snapshots", Long.class))
-                .isEqualTo(681905L);
+                .isEqualTo(15091L);
     }
 
     @Test

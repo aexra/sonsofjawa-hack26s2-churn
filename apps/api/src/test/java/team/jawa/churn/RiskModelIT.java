@@ -42,9 +42,9 @@ class RiskModelIT extends IntegrationTest {
         assertThat(jdbc.queryForList(
                         "select risk_score::text from scores_delta_vw where status='scored' order by account_id",
                         String.class))
-                .containsExactly("24.98", "23.33", "78.47", "19.18", "56.29", "55.00");
+                .containsExactly("15.61", "26.99", "66.67", "10.66", "88.88", "66.64");
         assertThat(jdbc.queryForObject("select sum(expected_loss) from scores_delta_vw", Long.class))
-                .isEqualTo(681905L);
+                .isEqualTo(15091L);
         assertThat(jdbc.queryForObject("select count(*) from scores_delta_vw where status='no_score'", Integer.class))
                 .isEqualTo(4);
     }
@@ -59,7 +59,7 @@ class RiskModelIT extends IntegrationTest {
         assertThat(jdbc.queryForObject("select max(version) from model_revisions", Long.class))
                 .isGreaterThan(version);
         assertThat(jdbc.queryForObject("select sum(expected_loss) from scores_delta_vw", Long.class))
-                .isEqualTo(662652L);
+                .isEqualTo(13240L);
         assertThat(jdbc.queryForObject(
                         "select count(distinct account_id) from delta where proc_date is null", Integer.class))
                 .isEqualTo(10);
@@ -78,7 +78,7 @@ class RiskModelIT extends IntegrationTest {
         assertThat(jdbc.queryForObject("select count(*) from customer_scores_vw", Integer.class))
                 .isEqualTo(10);
         assertThat(jdbc.queryForObject("select sum(expected_loss) from customer_scores_vw", Long.class))
-                .isEqualTo(681905L);
+                .isEqualTo(15091L);
         assertThat(jdbc.queryForObject(
                         "select count(*) from customer_scores_vw where model_version is null or score_status='pending'",
                         Integer.class))

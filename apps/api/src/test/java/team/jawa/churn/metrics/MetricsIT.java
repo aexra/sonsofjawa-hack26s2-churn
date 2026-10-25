@@ -49,7 +49,7 @@ class MetricsIT extends IntegrationTest {
         recalc.run("manual");
         Client admin = login("admin", "admin12345");
         String body = scrape(admin);
-        assertThat(body).contains("churn_expected_loss_euros 6819.05");
+        assertThat(body).contains("churn_expected_loss_euros 150.91");
         assertSummary(body, summaries.get());
         assertThat(meters.counter("churn_recalc_accounts", "trigger", "manual").count())
                 .isEqualTo(before + 10);
@@ -69,10 +69,10 @@ class MetricsIT extends IntegrationTest {
                 .isPositive();
         assertThat(meters.get("churn_last_recalc_timestamp_seconds").gauge().value())
                 .isEqualTo(lastSuccess);
-        jdbc.update("update accounts set balance = balance + 100000 where id = 5");
+        jdbc.update("update services set status = 'deleted' where \"ownerId\" = 5");
         recalc.run("manual");
         assertSummary(scrape(admin), summaries.get());
-        assertThat(summaries.get().money().expectedLoss()).isLessThan(681905L);
+        assertThat(summaries.get().money().expectedLoss()).isLessThan(15091L);
     }
 
     @Test

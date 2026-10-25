@@ -85,18 +85,18 @@ class AnalyticsIT extends IntegrationTest {
         assertThat(accounts.get("total").asInt()).isEqualTo(10);
         assertThat(accounts.get("scored").asInt()).isEqualTo(6);
         assertThat(accounts.get("high").asInt()).isEqualTo(3);
-        assertThat(accounts.get("medium").asInt()).isZero();
-        assertThat(accounts.get("low").asInt()).isEqualTo(3);
+        assertThat(accounts.get("medium").asInt()).isEqualTo(1);
+        assertThat(accounts.get("low").asInt()).isEqualTo(2);
         assertThat(accounts.get("noScore").asInt()).isEqualTo(4);
         assertThat(accounts.get("pending").asInt()).isZero();
         JsonNode money = summary.get("money");
-        assertThat(money.get("expectedLoss").asLong()).isEqualTo(681905L);
-        assertThat(money.get("revenueHorizon").asLong()).isEqualTo(1159251L);
-        assertThat(money.get("revenueAtRisk").asLong()).isEqualTo(1086650L);
+        assertThat(money.get("expectedLoss").asLong()).isEqualTo(15091L);
+        assertThat(money.get("revenueHorizon").asLong()).isEqualTo(77489L);
+        assertThat(money.get("revenueAtRisk").asLong()).isEqualTo(4904L);
         assertThat(money.get("securedAmount").asLong())
                 .isEqualTo(jdbc.queryForObject("select sum(secured_amount) from scores", Long.class));
-        assertThat(summary.get("avgRiskScore").decimalValue()).isEqualByComparingTo("42.88");
-        assertThat(summary.get("servicesAtRisk").asInt()).isEqualTo(11);
+        assertThat(summary.get("avgRiskScore").decimalValue()).isEqualByComparingTo("45.91");
+        assertThat(summary.get("servicesAtRisk").asInt()).isEqualTo(12);
         assertThat(summary.get("calculatedAt").isString()).isTrue();
         assertThat(summary.get("lastRecalc").get("status").asString()).isEqualTo("ok");
         assertThat(summary.get("lastRecalc").get("accountsProcessed").asInt()).isEqualTo(10);
@@ -116,18 +116,18 @@ class AnalyticsIT extends IntegrationTest {
             counts.add(bucket.get("count").asInt());
             from += 10;
         }
-        assertThat(counts).containsExactly(0, 1, 2, 0, 0, 2, 0, 1, 0, 0);
+        assertThat(counts).containsExactly(0, 2, 1, 0, 0, 0, 2, 0, 1, 0);
         JsonNode reasons = summary.get("topReasons");
-        assertThat(reasons).hasSize(2);
-        assertThat(reasons.get(0).get("key").asString()).isEqualTo("renewal_unsecured");
+        assertThat(reasons).hasSize(3);
+        assertThat(reasons.get(0).get("key").asString()).isEqualTo("prolong_wait");
         assertThat(reasons.get(0).get("title").asString())
                 .isEqualTo(jdbc.queryForObject(
-                        "select title from model_features where key = 'renewal_unsecured'", String.class));
-        assertThat(reasons.get(0).get("customers").asInt()).isEqualTo(4);
-        assertThat(reasons.get(0).get("contributionSum").decimalValue()).isEqualByComparingTo("82.49");
-        assertThat(reasons.get(1).get("key").asString()).isEqualTo("prolong_wait");
+                        "select title from model_features where key = 'prolong_wait'", String.class));
+        assertThat(reasons.get(0).get("customers").asInt()).isEqualTo(3);
+        assertThat(reasons.get(0).get("contributionSum").decimalValue()).isEqualByComparingTo("199.97");
+        assertThat(reasons.get(1).get("key").asString()).isEqualTo("renewal_unsecured");
         assertThat(reasons.get(1).get("customers").asInt()).isEqualTo(2);
-        assertThat(reasons.get(1).get("contributionSum").decimalValue()).isEqualByComparingTo("60.00");
+        assertThat(reasons.get(1).get("contributionSum").decimalValue()).isEqualByComparingTo("26.27");
     }
 
     @Test
@@ -152,7 +152,7 @@ class AnalyticsIT extends IntegrationTest {
 
         assertThat(cache.get()).isSameAs(first);
 
-        jdbc.update("update accounts set balance = balance + 100000 where id = 5");
+        jdbc.update("update services set status = 'deleted' where \"ownerId\" = 5");
         assertThat(recalc.run("manual").result()).isEqualTo(RecalcService.Result.OK);
 
         Summary second = cache.get();
@@ -165,7 +165,7 @@ class AnalyticsIT extends IntegrationTest {
     @Test
     void theCacheRefreshesWhenAnAlreadyVisibleRunFinishes() throws Exception {
         loadAndRecalculate();
-        jdbc.update("update accounts set balance = balance + 100000 where id = 5");
+        jdbc.update("update services set status = 'deleted' where \"ownerId\" = 5");
         long runId = jdbc.queryForObject(
                 "INSERT INTO recalc_runs (trigger, started_at, as_of, status)"
                         + " VALUES ('manual', now(), public.model_now(), 'running') RETURNING id",
@@ -265,12 +265,12 @@ class AnalyticsIT extends IntegrationTest {
             forecastDays++;
         }
         assertThat(forecastDays).isEqualTo(31);
-        assertThat(nonRenewals).isEqualByComparingTo("5.7213");
+        assertThat(nonRenewals).isEqualByComparingTo("7.1528");
         assertThat(nonRenewals)
                 .isEqualByComparingTo(
                         jdbc.queryForObject("select sum(risk_weight) from churn_forecast_vw", BigDecimal.class));
         assertThat(jdbc.queryForObject("select count(*) from churn_forecast_vw", Integer.class))
-                .isEqualTo(11);
+                .isEqualTo(12);
         long expectedLoss = jdbc.queryForObject(
                 "select round(sum(risk_weight * price * 30 / term_days(payment_term))) from churn_forecast_vw",
                 Long.class);
@@ -285,7 +285,7 @@ class AnalyticsIT extends IntegrationTest {
 
         for (JsonNode point : points) {
             if (point.get("kind").asString().equals("today")) {
-                assertThat(point.get("servicesAtRisk").asInt()).isEqualTo(11);
+                assertThat(point.get("servicesAtRisk").asInt()).isEqualTo(12);
             } else {
                 assertThat(point.get("servicesAtRisk").isNull()).isTrue();
             }

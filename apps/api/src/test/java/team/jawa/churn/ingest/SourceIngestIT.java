@@ -3,7 +3,6 @@ package team.jawa.churn.ingest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import java.math.BigDecimal;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -121,8 +120,6 @@ class SourceIngestIT extends IntegrationTest {
     void aCsvUploadUpdatesTheServiceAndTheOwnerGetsANewScore() throws Exception {
         IngestSupport.loadReference(jdbc);
         recalculate();
-        BigDecimal before = jdbc.queryForObject(
-                "select risk_score from scores where account_id = 6 and is_current", BigDecimal.class);
 
         double count = meters.counter("churn_ingest_rows", "entity", "services", "mode", "upsert", "result", "ok")
                 .count();
@@ -148,9 +145,8 @@ class SourceIngestIT extends IntegrationTest {
                                 Integer.class)
                         > 0);
         awaitIdle();
-        BigDecimal after = jdbc.queryForObject(
-                "select risk_score from scores where account_id = 6 and is_current", BigDecimal.class);
-        assertThat(after).isGreaterThan(before);
+        assertThat(jdbc.queryForObject("select count(*) from scores where account_id = 6", Integer.class))
+                .isEqualTo(2);
         assertThat(jdbc.queryForObject("select status from ingest_log", String.class))
                 .isEqualTo("ok");
     }

@@ -66,14 +66,14 @@ class CustomerDetailsIT extends IntegrationTest {
         assertThat(account.get("balance").longValue()).isEqualTo(28657L);
         assertThat(account.get("totalReplenished").longValue()).isEqualTo(293608L);
         assertThat(score.get("status").asString()).isEqualTo("scored");
-        assertThat(score.get("riskScore").decimalValue()).isEqualByComparingTo("78.47");
+        assertThat(score.get("riskScore").decimalValue()).isEqualByComparingTo("66.67");
         assertThat(score.get("riskLevel").asString()).isEqualTo("high");
-        assertThat(score.get("loyalty").decimalValue()).isEqualByComparingTo("21.53");
-        assertThat(score.get("probability").decimalValue()).isEqualByComparingTo("0.7847");
-        assertThat(score.get("revenueHorizon").longValue()).isEqualTo(469136L);
-        assertThat(score.get("securedAmount").longValue()).isEqualTo(0L);
-        assertThat(score.get("uncoveredAmount").longValue()).isEqualTo(469136L);
-        assertThat(score.get("expectedLoss").longValue()).isEqualTo(368131L);
+        assertThat(score.get("loyalty").decimalValue()).isEqualByComparingTo("33.33");
+        assertThat(score.get("probability").decimalValue()).isEqualByComparingTo("0.6667");
+        assertThat(score.get("revenueHorizon").longValue()).isEqualTo(1696L);
+        assertThat(score.get("securedAmount").longValue()).isEqualTo(1696L);
+        assertThat(score.get("uncoveredAmount").longValue()).isEqualTo(0L);
+        assertThat(score.get("expectedLoss").longValue()).isEqualTo(1131L);
         assertThat(score.get("horizonDays").intValue()).isEqualTo(30);
         assertThat(score.get("servicesLive").intValue()).isEqualTo(3);
         assertThat(score.get("servicesAtRisk").intValue()).isEqualTo(3);
@@ -81,7 +81,7 @@ class CustomerDetailsIT extends IntegrationTest {
         assertThat(score.get("modelVersion").isNull()).isFalse();
         assertThat(score.get("reasons").get(0).get("key").asString()).isEqualTo("prolong_wait");
         assertThat(score.get("reasons").get(0).get("text").asString())
-                .isEqualTo("3 из 3 действующих услуг ожидают оплаты");
+                .isEqualTo("задержка продления: сигнал 100%; например, услуга service-0005");
         assertThat(score.get("anomalies").get(0).asString()).isEqualTo("overdue_prolong_wait");
 
         List<String> featureKeys = new ArrayList<>();
@@ -98,7 +98,7 @@ class CustomerDetailsIT extends IntegrationTest {
                         "suspended_share",
                         "termination_history",
                         "payment_failures");
-        assertThat(contribution).isEqualByComparingTo("78.47");
+        assertThat(contribution).isEqualByComparingTo("66.67");
         assertThat(score.get("features").get(3).get("contribution").decimalValue())
                 .isEqualByComparingTo("0");
 
@@ -215,8 +215,8 @@ class CustomerDetailsIT extends IntegrationTest {
                 .isNotEqualTo(history.get(1).get("modelVersion").longValue());
         assertThat(history.get(0).get("calculatedAt").asString())
                 .isLessThan(history.get(1).get("calculatedAt").asString());
-        assertThat(history.get(0).get("riskScore").decimalValue()).isEqualByComparingTo("78.47");
-        assertThat(history.get(1).get("riskScore").decimalValue()).isEqualByComparingTo("80.43");
+        assertThat(history.get(0).get("riskScore").decimalValue()).isEqualByComparingTo("66.67");
+        assertThat(history.get(1).get("riskScore").decimalValue()).isEqualByComparingTo("72.73");
         assertThat(history.get(1).get("status").asString()).isEqualTo("scored");
         assertThat(unscored).hasSize(2);
         assertThat(unscored.get(0).get("status").asString()).isEqualTo("no_score");

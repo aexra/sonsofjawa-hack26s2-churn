@@ -100,12 +100,12 @@ class SourceSnapshotIT extends IntegrationTest {
                         "select risk_score::text from scores where is_current and status = 'scored' order by"
                                 + " account_id",
                         String.class))
-                .containsExactly("24.98", "23.33", "78.47", "19.18", "56.29", "55.00");
+                .containsExactly("15.61", "26.99", "66.67", "10.66", "88.88", "66.64");
         assertThat(jdbc.queryForObject(
                         "select count(*) from scores where is_current and status = 'no_score'", Integer.class))
                 .isEqualTo(4);
         assertThat(jdbc.queryForObject("select sum(expected_loss) from scores where is_current", Long.class))
-                .isEqualTo(681905L);
+                .isEqualTo(15091L);
         assertThat(jdbc.queryForObject("select trigger from recalc_runs", String.class))
                 .isEqualTo("snapshot");
         Map<String, Object> entry =

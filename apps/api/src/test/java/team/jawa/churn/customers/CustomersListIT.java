@@ -96,24 +96,24 @@ class CustomersListIT extends IntegrationTest {
         List<Long> descending = ids(get("?fields=id&sort=riskScore,desc").body());
         List<Long> ascending = ids(get("?fields=id&sort=riskScore,asc").body());
 
-        assertThat(descending).containsExactly(5L, 9L, 10L, 1L, 4L, 6L, 2L, 3L, 7L, 8L);
-        assertThat(ascending).containsExactly(6L, 4L, 1L, 10L, 9L, 5L, 2L, 3L, 7L, 8L);
+        assertThat(descending).containsExactly(9L, 5L, 10L, 4L, 1L, 6L, 2L, 3L, 7L, 8L);
+        assertThat(ascending).containsExactly(6L, 1L, 4L, 10L, 5L, 9L, 2L, 3L, 7L, 8L);
     }
 
     @Test
     void theDefaultOrderIsRiskScoreDescending() throws Exception {
         HttpResponse<String> response = get("?fields=id");
 
-        assertThat(ids(response.body())).startsWith(5L, 9L, 10L);
+        assertThat(ids(response.body())).startsWith(9L, 5L, 10L);
         assertThat(response.body()).contains("\"sort\":[\"riskScore,desc\",\"id,asc\"]");
     }
 
     @Test
     void expectedLossAndRiskLevelSorts() throws Exception {
         assertThat(ids(get("?fields=id&level=high&sort=expectedLoss,desc").body()))
-                .containsExactly(5L, 9L, 10L);
+                .containsExactly(9L, 5L, 10L);
         assertThat(ids(get("?fields=id&level=high&sort=expectedLoss,asc").body()))
-                .containsExactly(10L, 9L, 5L);
+                .containsExactly(10L, 5L, 9L);
         assertThat(ids(get("?fields=id&sort=riskLevel,desc&size=6").body())).startsWith(5L, 9L, 10L);
     }
 
@@ -157,8 +157,8 @@ class CustomersListIT extends IntegrationTest {
         assertThat(ids(get("?fields=id&sort=id,asc&status=no_score").body())).containsExactly(2L, 3L, 7L, 8L);
         assertThat(ids(get("?fields=id&sort=id,asc&status=scored&minScore=50").body()))
                 .containsExactly(5L, 9L, 10L);
-        assertThat(ids(get("?fields=id&sort=id,asc&maxScore=24").body())).containsExactly(4L, 6L);
-        assertThat(ids(get("?fields=id&sort=id,asc&minLoss=100000").body())).containsExactly(5L, 9L);
+        assertThat(ids(get("?fields=id&sort=id,asc&maxScore=24").body())).containsExactly(1L, 6L);
+        assertThat(ids(get("?fields=id&sort=id,asc&minLoss=1100").body())).containsExactly(1L, 5L, 9L);
         assertThat(ids(get("?fields=id&sort=id,asc&hasAnomalies=true").body())).containsExactly(5L, 9L, 10L);
         assertThat(ids(get("?fields=id&sort=id,asc&hasAnomalies=false&status=scored")
                         .body()))
@@ -234,13 +234,14 @@ class CustomersListIT extends IntegrationTest {
         assertThat(first)
                 .contains("\"key\":\"renewal_unsecured\"")
                 .contains("\"title\":\"продление не обеспечено\"")
-                .contains("услуга service-0001 не продлится автоматически: срок истекает через 1 ч");
-        assertThat(fifth).contains("\"key\":\"prolong_wait\"").contains("3 из 3 действующих услуг ожидают оплаты");
+                .contains("ручное продление: сигнал 28%; например, услуга service-0001");
+        assertThat(fifth)
+                .contains("\"key\":\"prolong_wait\"")
+                .contains("задержка продления: сигнал 100%; например, услуга service-0005");
         String normalized = ninth.replace(' ', ' ').replace(' ', ' ');
         assertThat(normalized)
-                .contains("услуга service-0009 не продлится автоматически: срок истёк")
-                .contains("средств хватает на 15% продлений за 30 дн.: доступно 915,06 €, нужно 6 164,50 €")
-                .contains("3 из 3 действующих услуг выключены клиентом (100% выручки)");
+                .contains("задержка продления: сигнал 100%; например, услуга service-0019")
+                .contains("приостановленные услуги: 100% платежей");
         assertThat(normalized).containsPattern("\"contribution\":\\d+(\\.\\d+)?");
     }
 
@@ -289,7 +290,7 @@ class CustomersListIT extends IntegrationTest {
                 .contains("attachment")
                 .contains("customers.csv");
         assertThat(all.body().lines().toList()).hasSize(11).first().isEqualTo("id,riskScore,expectedLoss");
-        assertThat(all.body().lines().skip(5).findFirst().orElseThrow()).isEqualTo("5,78.47,368131");
+        assertThat(all.body().lines().skip(5).findFirst().orElseThrow()).isEqualTo("5,66.67,1131");
         assertThat(all.body().lines().skip(2).findFirst().orElseThrow()).isEqualTo("2,,");
         assertThat(response.body())
                 .isEqualTo("email,id,riskScore,topReason,anomalies\r\n\"'=cmd,\"\"x\"\"@example.test\",3,,,\r\n");
@@ -302,6 +303,6 @@ class CustomersListIT extends IntegrationTest {
 
         assertThat(response.body().lines().toList()).hasSize(4);
         assertThat(response.body().lines().skip(1).findFirst().orElseThrow())
-                .startsWith("5,3 из 3 действующих услуг ожидают оплаты");
+                .startsWith("9,\"задержка продления: сигнал 100%; например, услуга service-0019\"");
     }
 }

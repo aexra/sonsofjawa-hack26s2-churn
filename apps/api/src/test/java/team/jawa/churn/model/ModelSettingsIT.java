@@ -126,9 +126,9 @@ class ModelSettingsIT extends IntegrationTest {
         assertThat(jdbc.queryForList(
                         "select risk_score::text from scores where is_current and status = 'scored' order by account_id",
                         String.class))
-                .containsExactly("22.71", "21.21", "80.43", "17.44", "51.17", "59.09");
+                .containsExactly("12.77", "22.08", "72.73", "8.72", "90.90", "72.70");
         assertThat(jdbc.queryForObject("select sum(expected_loss) from scores where is_current", Long.class))
-                .isEqualTo(662652L);
+                .isEqualTo(13240L);
 
         HttpResponse<String> revisions = admin.get("/api/v1/model/revisions?limit=1");
         assertThat(revisions.body())

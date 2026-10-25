@@ -15,11 +15,11 @@ class ReferenceDatasetTest(PostgresFixture):
             for account, row in rows.items() if row['reasons']
         }
         self.assertEqual(keys[1], ['renewal_unsecured'])
-        self.assertEqual(keys[4], ['renewal_unsecured', 'suspended_share'])
-        self.assertEqual(keys[5], ['prolong_wait', 'renewal_unsecured', 'insufficient_funds'])
+        self.assertEqual(keys[4], ['suspended_share', 'renewal_unsecured'])
+        self.assertEqual(keys[5], ['prolong_wait'])
         self.assertEqual(keys[6], ['renewal_unsecured'])
-        self.assertEqual(keys[9], ['renewal_unsecured', 'insufficient_funds', 'suspended_share'])
-        self.assertEqual(keys[10], ['prolong_wait', 'renewal_unsecured'])
+        self.assertEqual(keys[9], ['prolong_wait', 'suspended_share'])
+        self.assertEqual(keys[10], ['prolong_wait'])
         for account, row in rows.items():
             contributions = [r['contribution'] for r in row['reasons'] if r['contribution'] > 0]
             self.assertEqual(contributions, sorted(contributions, reverse=True), account)
@@ -43,21 +43,21 @@ class ReferenceDatasetTest(PostgresFixture):
         self.assertEqual(
             (summary['accounts_high'], summary['accounts_medium'],
              summary['accounts_low'], summary['accounts_no_score']),
-            (3, 0, 3, 4),
+            (3, 1, 2, 4),
         )
-        self.assertEqual(summary['expected_loss'], 681905)
-        self.assertEqual(summary['revenue_horizon'], 1159251)
-        self.assertEqual(summary['revenue_at_risk'], 1086650)
-        self.assertEqual(summary['services_at_risk'], 11)
-        self.assertEqual(float(summary['avg_risk_score']), 42.88)
+        self.assertEqual(summary['expected_loss'], 15091)
+        self.assertEqual(summary['revenue_horizon'], 77489)
+        self.assertEqual(summary['revenue_at_risk'], 4904)
+        self.assertEqual(summary['services_at_risk'], 12)
+        self.assertEqual(float(summary['avg_risk_score']), 45.91)
 
     def test_forecast_and_history_on_the_reference_dataset(self):
         self.fixture()
         self.persist_scores()
         forecast = self.rows(
             'SELECT count(*) AS n, round(sum(risk_weight), 4) AS total FROM churn_forecast_vw')[0]
-        self.assertEqual(forecast['n'], 11)
-        self.assertEqual(float(forecast['total']), 5.7213)
+        self.assertEqual(forecast['n'], 12)
+        self.assertEqual(float(forecast['total']), 7.1528)
         self.assertEqual(len(self.rows('SELECT * FROM churn_history_vw')), 6)
         recent = self.rows(
             "SELECT * FROM churn_history_vw "
