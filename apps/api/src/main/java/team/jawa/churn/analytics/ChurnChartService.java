@@ -145,11 +145,11 @@ public class ChurnChartService {
 
     private List<DayWeight> forecast(LocalDate today, LocalDate last, int horizonDays) {
         return weights("""
-                SELECT (expected_at AT TIME ZONE 'UTC')::date AS day,
+                SELECT greatest((expected_at AT TIME ZONE 'UTC')::date, :from) AS day,
                        sum(risk_weight) AS non_renewals,
                        round(sum(risk_weight * price * :horizon / public.term_days(payment_term)))::bigint AS loss
                 FROM public.churn_forecast_vw
-                WHERE (expected_at AT TIME ZONE 'UTC')::date BETWEEN :from AND :to
+                WHERE greatest((expected_at AT TIME ZONE 'UTC')::date, :from) BETWEEN :from AND :to
                 GROUP BY 1
                 """, today, last, horizonDays);
     }

@@ -128,7 +128,7 @@ public class ForecastComparison {
                        (SELECT max(version)::text FROM public.model_revisions) AS policy
                 FROM public.risk_payment_scores_vw r
                 WHERE r.payment_index = 0 AND r.price > 0 AND r.due_at > :asOf
-                  AND ((r.due_at + r.grace * interval '24 hours') AT TIME ZONE 'UTC')::date <= :last
+                  AND (r.due_at AT TIME ZONE 'UTC')::date <= :last
                 ORDER BY r.account_id, r.service_id, r.due_at
                 """)
                 .param("asOf", history.asOf())
@@ -163,7 +163,7 @@ public class ForecastComparison {
         Map<LocalDate, BigDecimal> counts = new HashMap<>();
         Map<LocalDate, BigDecimal> money = new HashMap<>();
         for (var row : rows) {
-            LocalDate day = OffsetDateTime.parse((String) row.get("deadline"))
+            LocalDate day = OffsetDateTime.parse((String) row.get("due_at"))
                     .withOffsetSameInstant(ZoneOffset.UTC)
                     .toLocalDate();
             BigDecimal weight = learned

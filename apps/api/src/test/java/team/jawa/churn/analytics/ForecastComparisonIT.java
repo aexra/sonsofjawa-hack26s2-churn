@@ -130,10 +130,19 @@ class ForecastComparisonIT extends IntegrationTest {
                     .isEqualTo(historyPoints.get(i).path("overdueNonRenewals"));
             assertThat(point.path("overdueLossAmount"))
                     .isEqualTo(historyPoints.get(i).path("overdueLossAmount"));
+            long duePayments = received.stream()
+                    .filter(row -> java.time.OffsetDateTime.parse((String) row.get("due_at"))
+                            .withOffsetSameInstant(java.time.ZoneOffset.UTC)
+                            .toLocalDate()
+                            .toString()
+                            .equals(point.path("date").asText()))
+                    .count();
             if (!point.path("overdueNonRenewals").isNull()) {
                 overdueCount = overdueCount.add(point.path("overdueNonRenewals").decimalValue());
             }
             if (!point.path("expectedNonRenewals").isNull()) {
+                assertThat(point.path("expectedNonRenewals").decimalValue())
+                        .isEqualByComparingTo(BigDecimal.valueOf(duePayments).multiply(new BigDecimal("0.8")));
                 predictedCount =
                         predictedCount.add(point.path("expectedNonRenewals").decimalValue());
                 predictedMoney += point.path("expectedLossAmount").asLong();
@@ -152,6 +161,33 @@ class ForecastComparisonIT extends IntegrationTest {
             assertThat(row.get("provenance")).isEqualTo("unverified");
             assertThat(((Map<?, ?>) row.get("features"))).hasSize(6);
         }
+    }
+
+    @Test
+    void includesPaymentAtWindowEndBeforeItsGraceDeadline() throws Exception {
+        var client = analyst();
+        jdbc.update("insert into accounts (id, email) values (101, 'boundary@example.test')");
+        jdbc.update("""
+                insert into services
+                    (id, name, "ownerId", "paymentTerm", "autoProlong", "createdAt", "expiresAt", status, price)
+                values (101, 'boundary', 101, 'month', false, model_now() - interval '1 year',
+                    model_now() + interval '1 day', 'active', 1000)
+                """);
+        recalc.run("manual");
+        var response = client.get("/api/v1/analytics/model-comparison?futureDays=1");
+        assertThat(response.statusCode()).isEqualTo(200);
+        var body = json.readTree(response.body());
+        int expectedPayments = jdbc.queryForObject("""
+                select count(*) from risk_payment_scores_vw
+                where payment_index = 0 and price > 0 and due_at > model_now()
+                    and (due_at at time zone 'UTC')::date <= (model_now() at time zone 'UTC')::date + 1
+                """, Integer.class);
+        assertThat(expectedPayments).isPositive();
+        assertThat(body.path("payments").asInt()).isEqualTo(expectedPayments);
+        var points = body.path("expert").path("points");
+        var last = points.get(points.size() - 1);
+        assertThat(last.path("date").asText()).isEqualTo("2026-10-20");
+        assertThat(last.path("expectedNonRenewals").decimalValue()).isPositive();
     }
 
     @Test
