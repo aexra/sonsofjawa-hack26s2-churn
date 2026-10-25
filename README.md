@@ -464,6 +464,7 @@ Makefile         точка входа для всех команд
 | `WEB_API_BASE_URL` | база API для SPA | `/api/v1` |
 | `WEB_DOCS_URL` | ссылка на Swagger | `/api/v1/docs` |
 | `WEB_GRAFANA_URL` | ссылка на Grafana в меню; пусто — скрыта | пусто |
+| `WEB_DEMO_USER` | подпись демо-учётки под кнопкой SSO (`демо-юзер: …`); пусто — скрыта | пусто |
 
 **Compose и демо**
 
