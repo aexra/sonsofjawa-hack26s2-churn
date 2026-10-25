@@ -1,5 +1,3 @@
-"""Unit tests for incremental feed builders (no Postgres / Airflow)."""
-
 from __future__ import annotations
 
 import random
@@ -37,7 +35,6 @@ class BuildersTest(unittest.TestCase):
             self.assertGreaterEqual(row["price"], low)
             self.assertLessEqual(row["price"], high)
             period = timedelta(days=NOMINAL_DAYS[row["paymentTerm"]])
-            # created + N periods == expires (within float noise on hour)
             delta = row["expiresAt"] - row["createdAt"]
             periods = delta / period
             self.assertAlmostEqual(periods, round(periods), places=6)

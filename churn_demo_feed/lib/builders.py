@@ -1,5 +1,3 @@
-"""Builders for incremental churn feed (no DB / Airflow deps)."""
-
 from __future__ import annotations
 
 import math
@@ -44,7 +42,6 @@ PRICE_RANGE = {
 HOUR_SHARE = 0.015
 FAILURE_RATE = 0.08
 
-# Weights ≈ generate_demo.py scenario shares (percent).
 SCENARIO_WEIGHTS = (
     ("healthy", 35),
     ("expiring_manual", 15),
@@ -321,7 +318,6 @@ def build_account_packet(
     name_prefix: str,
     scenario: str | None = None,
 ) -> dict[str, Any]:
-    """Build one scenario account with services and lifecycle transactions."""
     as_of = ensure_aware(as_of)
     scenario = scenario or pick_scenario(rng)
     specs, mode, extra_failures = BUILDERS[scenario](rng)
@@ -368,7 +364,6 @@ def build_standalone_service(
     name: str,
     owner_id: int,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """New live service on an existing owner (mostly active, coherent term/expires)."""
     as_of = ensure_aware(as_of)
     if rng.random() < 0.55:
         item = spec("active", True, far_days(rng) if rng.random() < 0.6 else rng.uniform(1, 29))
@@ -388,13 +383,8 @@ def build_prolong_event(
     service_id: int,
     status: str,
 ) -> tuple[dict[str, Any], str | None]:
-    """
-    Incremental prolong near model_now.
-    Returns (transaction, optional new service status).
-    """
     as_of = ensure_aware(as_of)
     failed = rng.random() < FAILURE_RATE
-    # Bias: failed prolong on non-wait live service may move to prolong_wait.
     new_status = None
     if failed and status in ("active", "suspended") and rng.random() < 0.35:
         new_status = "prolong_wait"

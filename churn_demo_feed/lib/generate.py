@@ -126,16 +126,6 @@ def run_feed(
     conn_id: str = CONNECTION_ID,
     seed: int | None = None,
 ) -> dict[str, Any]:
-    """
-    Incremental demo feed aligned with ops/scripts/generate_demo.py.
-
-    Budget meaning:
-    - accounts: new scenario account packets
-    - services: standalone services on existing owners
-    - transactions: prolong events on live services
-    Bundled services/txs inside a new-account packet do not consume
-    services/transactions budget.
-    """
     rng = random.Random(seed)
     stamp = str(int(time.time())) if seed is None else str(seed)
 

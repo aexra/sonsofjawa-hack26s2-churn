@@ -87,7 +87,6 @@ def churn_demo_feed():
     def generate_demo_rows() -> dict:
         context = get_current_context()
         params = dict(context.get("params") or {})
-        # CLI `dags trigger --conf` lands in dag_run.conf; merge over defaults.
         dag_run = context.get("dag_run")
         conf = getattr(dag_run, "conf", None) or {}
         if isinstance(conf, dict):

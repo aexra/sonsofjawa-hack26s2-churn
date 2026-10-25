@@ -23,7 +23,6 @@ def resolve_count(
     default_from: int,
     default_to: int,
 ) -> int:
-    """Return exact count if set, otherwise random in [from, to] inclusive."""
     exact_raw = params.get(f"{prefix}_exact")
     if exact_raw is not None and exact_raw != "":
         return _as_int(exact_raw, f"{prefix}_exact")
@@ -36,7 +35,6 @@ def resolve_count(
 
 
 def resolve_counts(params: Mapping[str, Any]) -> dict[str, int]:
-    """Budget: scenario accounts / standalone services / prolong events."""
     return {
         "accounts": resolve_count(
             params, prefix="accounts", default_from=1, default_to=2
