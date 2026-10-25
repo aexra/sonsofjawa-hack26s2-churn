@@ -38,21 +38,25 @@ export function usePageHeading({ title, detail, backTo, backLabel }: PageHeading
   }, [setHeading, title, detail, backTo, backLabel]);
 }
 
-export function AppShell({ headerStatus }: { headerStatus?: ReactNode }) {
+interface AppShellProps {
+  headerStatus?: ReactNode;
+  headerActions?: ReactNode;
+}
+
+export function AppShell({ headerStatus, headerActions }: AppShellProps) {
   const [heading, setHeading] = useState<PageHeading | null>(null);
   return (
     <PageHeadingContext.Provider value={setHeading}>
-      <AppShellFrame headerStatus={headerStatus} heading={heading} />
+      <AppShellFrame headerStatus={headerStatus} headerActions={headerActions} heading={heading} />
     </PageHeadingContext.Provider>
   );
 }
 
-interface AppShellFrameProps {
-  headerStatus?: ReactNode;
+interface AppShellFrameProps extends AppShellProps {
   heading: PageHeading | null;
 }
 
-function AppShellFrame({ headerStatus, heading }: AppShellFrameProps) {
+function AppShellFrame({ headerStatus, headerActions, heading }: AppShellFrameProps) {
   const { user, isAdmin } = useSession();
   const handle = useMatches()
     .map((match) => match.handle)
@@ -93,6 +97,7 @@ function AppShellFrame({ headerStatus, heading }: AppShellFrameProps) {
           <ModelClock />
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             {headerStatus}
+            {headerActions}
             {user && (
               <UserMenu login={user.login} role={user.role} authProvider={user.authProvider} />
             )}
