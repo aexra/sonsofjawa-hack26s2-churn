@@ -49,6 +49,7 @@ recalc:
 logging:
   level:
     root: ${LOG_LEVEL:INFO}
+    io.modelcontextprotocol: WARN
   pattern:
     correlation: "[%X{requestId:-}%replace( via=%X{via:-}){' via=$', ''}] "
 
