@@ -544,7 +544,9 @@ CREATE TRIGGER accounts_delta_upd AFTER UPDATE ON public.accounts
     REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
     FOR EACH STATEMENT EXECUTE FUNCTION public.delta_from_accounts();
 
-CREATE OR REPLACE FUNCTION public.recalculate_risk(p_trigger text DEFAULT 'manual')
+DROP FUNCTION IF EXISTS public.recalculate_risk(text);
+
+CREATE OR REPLACE FUNCTION public.recalculate_risk(p_trigger text DEFAULT 'manual', p_run_id bigint DEFAULT NULL)
     RETURNS TABLE (run_id bigint, status text, accounts_processed integer, model_version bigint, as_of timestamptz)
     LANGUAGE plpgsql
 AS $$
@@ -554,7 +556,7 @@ DECLARE
     v_version bigint;
     v_as_of timestamptz;
 BEGIN
-    IF p_trigger IS NULL OR p_trigger NOT IN ('timer', 'manual', 'model', 'snapshot', 'ingest', 'notify') THEN
+    IF p_trigger IS NULL OR p_trigger NOT IN ('timer', 'manual', 'model', 'snapshot', 'ingest') THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'unknown recalculation trigger';
     END IF;
     IF current_setting('transaction_isolation') NOT IN ('repeatable read', 'serializable') THEN
@@ -581,8 +583,18 @@ BEGIN
         RETURN QUERY SELECT NULL::bigint, 'idle'::text, 0, v_version, v_as_of;
         RETURN;
     END IF;
-    INSERT INTO public.recalc_runs (trigger, started_at, as_of, model_version, status)
-    VALUES (p_trigger, now(), v_as_of, v_version, 'running') RETURNING id INTO v_run;
+    IF p_run_id IS NULL THEN
+        INSERT INTO public.recalc_runs (trigger, started_at, as_of, model_version, status)
+        VALUES (p_trigger, now(), v_as_of, v_version, 'running') RETURNING id INTO v_run;
+    ELSE
+        UPDATE public.recalc_runs
+        SET started_at = now(), as_of = v_as_of, model_version = v_version, status = 'running'
+        WHERE id = p_run_id
+        RETURNING id INTO v_run;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'recalculation run does not exist';
+        END IF;
+    END IF;
     UPDATE public.scores s SET is_current=false
     WHERE s.is_current AND s.account_id IN (SELECT d.account_id FROM public.delta d WHERE d.proc_date IS NULL);
     INSERT INTO public.scores (
@@ -614,7 +626,8 @@ BEGIN
     UPDATE public.recalc_runs r
     SET status='ok', finished_at=now(), accounts_processed=v_count WHERE r.id=v_run;
     PERFORM pg_notify('churn_events', json_build_object(
-        'type','recalc.completed','at',now(),'modelVersion',v_version,'accountsProcessed',v_count
+        'type','recalc.completed','at',now(),'runId',v_run,'trigger',p_trigger,
+        'accountsProcessed',v_count,'modelVersion',v_version,'asOf',v_as_of,'finishedAt',now()
     )::text);
     RETURN QUERY SELECT v_run, 'ok'::text, v_count, v_version, v_as_of;
 END

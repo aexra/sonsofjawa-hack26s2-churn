@@ -4,7 +4,7 @@ COMPOSE := docker compose -f compose/compose.yml --env-file $(ENV_FILE)
 COMPOSE_DEV := docker compose -f compose/compose.yml -f compose/compose.dev.yml --env-file $(ENV_FILE)
 COMPOSE_BUILD := docker compose -f compose/compose.yml --env-file $(ENV_BUILD_FILE)
 
-.PHONY: check-env check-env-build up down restart logs ps dev db-reset seed build-images push
+.PHONY: check-env check-env-build up down restart logs ps dev db-reset seed demo-data demo-data-test build-images push
 
 check-env:
 	@test -f $(ENV_FILE) || { echo "файл .env не найден: скопируйте .env.example в .env"; exit 1; }
@@ -13,7 +13,7 @@ check-env-build:
 	@test -f $(ENV_BUILD_FILE) || { echo "файл .env.build не найден: скопируйте .env.build.example в .env.build"; exit 1; }
 
 up: check-env
-	$(COMPOSE) up -d --build --wait pg api web
+	$(COMPOSE) up -d --build --wait pg api web mcp
 	$(COMPOSE) run --rm seed
 
 down: check-env
@@ -38,8 +38,14 @@ db-reset: check-env
 seed: check-env
 	$(COMPOSE) run --rm seed
 
+demo-data:
+	python3 scripts/generate_demo.py --seed 42
+
+demo-data-test:
+	python3 -m unittest discover -s scripts -p 'test_*.py'
+
 build-images: check-env-build
-	$(COMPOSE_BUILD) build api web
+	$(COMPOSE_BUILD) build api web mcp
 
 push: build-images
-	$(COMPOSE_BUILD) push api web
+	$(COMPOSE_BUILD) push api web mcp

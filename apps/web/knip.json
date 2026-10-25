@@ -9,9 +9,9 @@
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,js,ts}"],
   "ignore": ["src/shared/api/schema.d.ts"],
   "ignoreDependencies": [
+    "@fontsource-variable/exo-2",
+    "@fontsource-variable/inter",
     "@fontsource-variable/jetbrains-mono",
-    "@fontsource-variable/montserrat",
-    "@fontsource-variable/roboto",
     "tw-animate-css",
     "tailwindcss"
   ],

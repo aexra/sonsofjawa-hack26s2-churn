@@ -12,3 +12,6 @@ test-results/
 .vscode/
 *.iml
 .DS_Store
+
+__pycache__/
+*.py[cod]

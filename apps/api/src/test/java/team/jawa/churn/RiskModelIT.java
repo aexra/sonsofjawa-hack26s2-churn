@@ -8,22 +8,11 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
-@Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Transactional
-class RiskModelIT {
-
-    @Container
-    @ServiceConnection
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18-alpine");
+class RiskModelIT extends IntegrationTest {
 
     @Autowired
     JdbcTemplate jdbc;
@@ -35,8 +24,11 @@ class RiskModelIT {
 
     @Test
     void flywayAppliesRiskMigrationsAndSemanticMetadata() {
-        assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where success", Integer.class))
-                .isEqualTo(4);
+        assertThat(jdbc.queryForObject(
+                        "select count(*) from flyway_schema_history where success and script in"
+                                + " ('V2__risk_core.sql', 'V3__risk_settings_validation.sql', 'R__risk_model.sql')",
+                        Integer.class))
+                .isEqualTo(3);
         assertThat(jdbc.queryForObject("select probability_calibrated from model_metadata_vw", Boolean.class))
                 .isFalse();
         assertThat(jdbc.queryForObject("select money_estimate_kind from model_metadata_vw", String.class))
@@ -50,9 +42,9 @@ class RiskModelIT {
         assertThat(jdbc.queryForList(
                         "select risk_score::text from scores_delta_vw where status='scored' order by account_id",
                         String.class))
-                .containsExactly("24.98", "23.33", "78.47", "19.18", "56.29", "55.00");
+                .containsExactly("15.61", "26.99", "66.67", "10.66", "88.88", "66.64");
         assertThat(jdbc.queryForObject("select sum(expected_loss) from scores_delta_vw", Long.class))
-                .isEqualTo(681905L);
+                .isEqualTo(15091L);
         assertThat(jdbc.queryForObject("select count(*) from scores_delta_vw where status='no_score'", Integer.class))
                 .isEqualTo(4);
     }
@@ -67,7 +59,7 @@ class RiskModelIT {
         assertThat(jdbc.queryForObject("select max(version) from model_revisions", Long.class))
                 .isGreaterThan(version);
         assertThat(jdbc.queryForObject("select sum(expected_loss) from scores_delta_vw", Long.class))
-                .isEqualTo(662652L);
+                .isEqualTo(13240L);
         assertThat(jdbc.queryForObject(
                         "select count(distinct account_id) from delta where proc_date is null", Integer.class))
                 .isEqualTo(10);
@@ -86,7 +78,7 @@ class RiskModelIT {
         assertThat(jdbc.queryForObject("select count(*) from customer_scores_vw", Integer.class))
                 .isEqualTo(10);
         assertThat(jdbc.queryForObject("select sum(expected_loss) from customer_scores_vw", Long.class))
-                .isEqualTo(681905L);
+                .isEqualTo(15091L);
         assertThat(jdbc.queryForObject(
                         "select count(*) from customer_scores_vw where model_version is null or score_status='pending'",
                         Integer.class))

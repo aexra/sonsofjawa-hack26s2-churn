@@ -1,7 +1,13 @@
 server:
   port: ${SERVER_PORT:8080}
+  tomcat:
+    max-swallow-size: ${INGEST_MAX_BYTES:20MB}
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: ${INGEST_MAX_BYTES:20MB}
+      max-request-size: ${INGEST_MAX_BYTES:20MB}
   profiles:
     include: log-${LOG_FORMAT:text}
   application:
@@ -29,11 +35,23 @@ management:
       probes:
         enabled: false
 
+ingest:
+  max-rows: ${INGEST_MAX_ROWS:100000}
+  max-bytes: ${INGEST_MAX_BYTES:20MB}
+
+recalc:
+  enabled: ${RECALC_ENABLED:true}
+  interval: ${RECALC_INTERVAL:1m}
+  scores-retention: ${SCORES_RETENTION:90d}
+  delta-retention: ${DELTA_RETENTION:7d}
+  maintenance-cron: ${MAINTENANCE_CRON:0 30 3 * * *}
+
 logging:
   level:
     root: ${LOG_LEVEL:INFO}
+    io.modelcontextprotocol: WARN
   pattern:
-    correlation: "[%X{requestId:-}] "
+    correlation: "[%X{requestId:-}%replace( via=%X{via:-}){' via=$', ''}] "
 
 springdoc:
   api-docs:
@@ -43,3 +61,35 @@ springdoc:
     path: /api/v1/docs
     csrf:
       enabled: true
+
+assistant:
+  model-url: ${ASSISTANT_MODEL_URL:https://api.omnirouter.ru/v1}
+  model: ${ASSISTANT_MODEL:deepseek/deepseek-v4-flash}
+  model-key: ${ASSISTANT_MODEL_KEY:}
+  mcp-url: ${ASSISTANT_MCP_URL:http://mcp:8090/mcp}
+  max-steps: ${ASSISTANT_MAX_STEPS:8}
+  max-messages: ${ASSISTANT_MAX_MESSAGES:20}
+  timeout: ${ASSISTANT_TIMEOUT:60s}
+  delegation-ttl: ${ASSISTANT_DELEGATION_TTL:120s}
+
+auth:
+  local-enabled: ${AUTH_LOCAL_ENABLED:true}
+  jwt-secret: ${AUTH_JWT_SECRET:}
+  access-ttl: ${AUTH_ACCESS_TTL:15m}
+  refresh-ttl: ${AUTH_REFRESH_TTL:30d}
+  cookie-secure: ${AUTH_COOKIE_SECURE:false}
+  bootstrap-admin-login: ${AUTH_BOOTSTRAP_ADMIN_LOGIN:admin}
+  bootstrap-admin-password: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:}
+  bootstrap-user-login: ${AUTH_BOOTSTRAP_USER_LOGIN:analyst}
+  bootstrap-user-password: ${AUTH_BOOTSTRAP_USER_PASSWORD:}
+
+oidc:
+  issuer-uri: ${OIDC_ISSUER_URI:}
+  display-name: ${OIDC_DISPLAY_NAME:keycloak}
+  client-id: ${OIDC_CLIENT_ID:}
+  client-secret: ${OIDC_CLIENT_SECRET:}
+  scopes: ${OIDC_SCOPES:openid profile email}
+  roles-claim: ${OIDC_ROLES_CLAIM:roles}
+  admin-role: ${OIDC_ADMIN_ROLE:admin}
+  user-role: ${OIDC_USER_ROLE:user}
+  public-url: ${PUBLIC_URL:http://localhost:8080}
