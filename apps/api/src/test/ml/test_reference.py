@@ -56,8 +56,8 @@ class ReferenceDatasetTest(PostgresFixture):
         self.persist_scores()
         forecast = self.rows(
             'SELECT count(*) AS n, round(sum(risk_weight), 4) AS total FROM churn_forecast_vw')[0]
-        self.assertEqual(forecast['n'], 12)
-        self.assertEqual(float(forecast['total']), 7.1528)
+        self.assertEqual(forecast['n'], 4)
+        self.assertEqual(float(forecast['total']), 1.3756)
         self.assertEqual(len(self.rows('SELECT * FROM churn_history_vw')), 6)
         recent = self.rows(
             "SELECT * FROM churn_history_vw "

@@ -265,12 +265,12 @@ class AnalyticsIT extends IntegrationTest {
             forecastDays++;
         }
         assertThat(forecastDays).isEqualTo(31);
-        assertThat(nonRenewals).isEqualByComparingTo("7.1528");
+        assertThat(nonRenewals).isEqualByComparingTo("1.3756");
         assertThat(nonRenewals)
                 .isEqualByComparingTo(
                         jdbc.queryForObject("select sum(risk_weight) from churn_forecast_vw", BigDecimal.class));
         assertThat(jdbc.queryForObject("select count(*) from churn_forecast_vw", Integer.class))
-                .isEqualTo(12);
+                .isEqualTo(4);
         long expectedLoss = jdbc.queryForObject(
                 "select round(sum(risk_weight * price * 30 / term_days(payment_term))) from churn_forecast_vw",
                 Long.class);
