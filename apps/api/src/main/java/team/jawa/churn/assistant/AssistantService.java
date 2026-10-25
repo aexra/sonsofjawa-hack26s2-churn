@@ -34,6 +34,7 @@ public class AssistantService {
 
     private static final Logger log = LoggerFactory.getLogger(AssistantService.class);
     private static final String TRUNCATED = "\n[truncated]";
+    private static final List<String> ROW_KEYS = List.of("items", "points");
     private static final TypeReference<Map<String, Object>> ARGUMENTS = new TypeReference<>() {};
 
     private final AssistantProperties properties;
@@ -251,8 +252,8 @@ public class AssistantService {
 
     static String summary(Object structured) {
         if (structured instanceof Map<?, ?> map) {
-            for (Object value : map.values()) {
-                if (value instanceof List<?> list) {
+            for (String key : ROW_KEYS) {
+                if (map.get(key) instanceof List<?> list) {
                     return rows(list.size());
                 }
             }

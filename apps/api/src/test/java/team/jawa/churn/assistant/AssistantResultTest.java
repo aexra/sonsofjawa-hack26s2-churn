@@ -29,6 +29,7 @@ class AssistantResultTest {
         assertThat(AssistantService.rows(11)).isEqualTo("11 строк");
         assertThat(AssistantService.rows(21)).isEqualTo("21 строка");
         assertThat(AssistantService.summary(Map.of("id", 7))).isEqualTo("готово");
+        assertThat(AssistantService.summary(Map.of("levels", List.of(1, 2)))).isEqualTo("готово");
     }
 
     @Test
