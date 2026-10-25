@@ -81,29 +81,35 @@ export const computePreview = (
 
   let lossBefore = 0;
   let lossAfter = 0;
-  const rows = customers.map((customer) => {
-    lossBefore += lossOf(customer, scoreOf(customer, saved, savedTotal));
+  const impacts = customers.map((customer) => {
+    const scoreSaved = scoreOf(customer, saved, savedTotal);
     const scoreAfter = scoreOf(customer, draft, draftTotal);
+    lossBefore += lossOf(customer, scoreSaved);
     lossAfter += lossOf(customer, scoreAfter);
+    const levelAfter = level(scoreAfter, draft);
     return {
-      id: customer.id,
-      scoreBefore: customer.riskScore,
-      levelBefore: customer.riskLevel,
-      scoreAfter,
-      levelAfter: level(scoreAfter, draft),
+      row: {
+        id: customer.id,
+        scoreBefore: customer.riskScore,
+        levelBefore: customer.riskLevel,
+        scoreAfter,
+        levelAfter,
+      },
+      delta: Math.abs(scoreAfter - scoreSaved),
+      levelChanged: level(scoreSaved, saved) !== levelAfter,
     };
   });
 
-  const delta = (row: PreviewRow) => Math.abs(row.scoreAfter - row.scoreBefore);
-  const byDelta = (a: PreviewRow, b: PreviewRow) => delta(b) - delta(a) || a.id - b.id;
-  const changed = rows.filter((row) => row.levelBefore !== row.levelAfter).sort(byDelta);
-  const moved = rows
-    .filter((row) => row.levelBefore === row.levelAfter && delta(row) > 0)
+  type Impact = (typeof impacts)[number];
+  const byDelta = (a: Impact, b: Impact) => b.delta - a.delta || a.row.id - b.row.id;
+  const changed = impacts.filter((impact) => impact.levelChanged).sort(byDelta);
+  const moved = impacts
+    .filter((impact) => !impact.levelChanged && impact.delta > 0)
     .sort(byDelta)
     .slice(0, TOP_BY_DELTA);
 
   return {
-    rows: [...changed, ...moved],
+    rows: [...changed, ...moved].map((impact) => impact.row),
     levelChanges: changed.length,
     lossBefore,
     lossAfter,
