@@ -7,7 +7,7 @@
 | Сервис | URL |
 |---|---|
 | Панель | https://aezaplati.ru |
-| Grafana (дашборд) | https://grafana.aezaplati.ru/d/churn-analyzer |
+| Grafana (дашборд) | https://grafana.aexra.ru/d/churn-analyzer |
 | MCP | https://mcp.aezaplati.ru |
 
 Демо-вход для жюри (SSO Keycloak): логин `test`, пароль `test` — и в панель, и в Grafana.
