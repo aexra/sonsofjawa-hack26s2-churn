@@ -50,7 +50,7 @@ logging:
   level:
     root: ${LOG_LEVEL:INFO}
   pattern:
-    correlation: "[%X{requestId:-}] "
+    correlation: "[%X{requestId:-}%replace( via=%X{via:-}){' via=$', ''}] "
 
 springdoc:
   api-docs:
@@ -60,6 +60,16 @@ springdoc:
     path: /api/v1/docs
     csrf:
       enabled: true
+
+assistant:
+  model-url: ${ASSISTANT_MODEL_URL:https://api.omnirouter.ru/v1}
+  model: ${ASSISTANT_MODEL:deepseek/deepseek-v4-flash}
+  model-key: ${ASSISTANT_MODEL_KEY:}
+  mcp-url: ${ASSISTANT_MCP_URL:http://mcp:8090/mcp}
+  max-steps: ${ASSISTANT_MAX_STEPS:8}
+  max-messages: ${ASSISTANT_MAX_MESSAGES:20}
+  timeout: ${ASSISTANT_TIMEOUT:60s}
+  delegation-ttl: ${ASSISTANT_DELEGATION_TTL:120s}
 
 auth:
   local-enabled: ${AUTH_LOCAL_ENABLED:true}

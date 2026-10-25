@@ -17,6 +17,7 @@ import team.jawa.churn.api.generated.model.AuthProvidersOidc;
 import team.jawa.churn.api.generated.model.CurrentUser;
 import team.jawa.churn.api.generated.model.LoginRequest;
 import team.jawa.churn.api.generated.model.Role;
+import team.jawa.churn.assistant.AssistantProperties;
 import team.jawa.churn.auth.ApiKeyPrincipal;
 import team.jawa.churn.auth.AuthProperties;
 import team.jawa.churn.auth.AuthService;
@@ -31,6 +32,7 @@ class AuthController implements AuthApi {
 
     private final AuthProperties auth;
     private final OidcProperties oidc;
+    private final AssistantProperties assistant;
     private final AuthService service;
     private final CookieService cookies;
     private final UserRepository users;
@@ -39,12 +41,14 @@ class AuthController implements AuthApi {
     AuthController(
             AuthProperties auth,
             OidcProperties oidc,
+            AssistantProperties assistant,
             AuthService service,
             CookieService cookies,
             UserRepository users,
             HttpServletRequest request) {
         this.auth = auth;
         this.oidc = oidc;
+        this.assistant = assistant;
         this.service = service;
         this.cookies = cookies;
         this.users = users;
@@ -87,7 +91,8 @@ class AuthController implements AuthApi {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof ApiKeyPrincipal key) {
             return ResponseEntity.ok(new CurrentUser(key.name(), AuthProvider.API_KEY)
-                    .scopes(key.scopes().stream().map(ApiKeyScope::fromValue).toList()));
+                    .scopes(key.scopes().stream().map(ApiKeyScope::fromValue).toList())
+                    .assistantEnabled(false));
         }
         if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "unauthenticated", "authentication required");
@@ -95,12 +100,14 @@ class AuthController implements AuthApi {
         UserAccount user = users.findById(principal.id())
                 .orElseThrow(
                         () -> new ApiException(HttpStatus.UNAUTHORIZED, "unauthenticated", "authentication required"));
-        return ResponseEntity.ok(toCurrentUser(user));
+        return ResponseEntity.ok(toCurrentUser(user).assistantEnabled(assistant.enabled()));
     }
 
     private ResponseEntity<CurrentUser> session(AuthService.Session session) {
         HttpHeaders headers = cookies.sessionHeaders(session.accessToken(), session.refreshToken());
-        return ResponseEntity.ok().headers(headers).body(toCurrentUser(session.user()));
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(toCurrentUser(session.user()).assistantEnabled(assistant.enabled()));
     }
 
     private static CurrentUser toCurrentUser(UserAccount user) {

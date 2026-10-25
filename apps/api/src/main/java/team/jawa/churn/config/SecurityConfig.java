@@ -38,6 +38,7 @@ import team.jawa.churn.auth.ApiKeyAuthenticationFilter;
 import team.jawa.churn.auth.ApiKeyService;
 import team.jawa.churn.auth.AuthProperties;
 import team.jawa.churn.auth.CookieService;
+import team.jawa.churn.auth.DelegatedTokenAuthenticationFilter;
 import team.jawa.churn.auth.JwtCookieAuthenticationFilter;
 import team.jawa.churn.auth.JwtService;
 import team.jawa.churn.auth.OidcClientRegistrations;
@@ -94,6 +95,7 @@ class SecurityConfig {
                         context -> context.securityContextRepository(new RequestAttributeSecurityContextRepository())
                                 .requireExplicitSave(true))
                 .addFilterBefore(new ApiKeyAuthenticationFilter(apiKeys, problems), BasicAuthenticationFilter.class)
+                .addFilterBefore(new DelegatedTokenAuthenticationFilter(jwt, problems), BasicAuthenticationFilter.class)
                 .addFilterBefore(new JwtCookieAuthenticationFilter(jwt, cookies), BasicAuthenticationFilter.class)
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .authorizeHttpRequests(a -> a.requestMatchers(
@@ -117,6 +119,8 @@ class SecurityConfig {
                                 "/v3/api-docs/swagger-config",
                                 "/api/v1/openapi.yaml")
                         .hasAnyAuthority("ROLE_USER", "SCOPE_read")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/assistant/messages")
+                        .hasAuthority("ROLE_USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/model/settings")
                         .hasRole("ADMIN")
                         .requestMatchers("/api/v1/source/**", "/api/v1/recalc")

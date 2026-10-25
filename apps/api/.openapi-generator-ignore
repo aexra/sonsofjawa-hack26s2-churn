@@ -2,3 +2,4 @@
 **/EventsApi.java
 **/OidcApi.java
 **/SystemApi.java
+**/AssistantApi.java

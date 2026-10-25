@@ -40,6 +40,8 @@ tags:
     description: user administration
   - name: api-keys
     description: bot api keys
+  - name: assistant
+    description: chat assistant over the mcp tools (hand-written controller - server-sent events)
   - name: system
     description: actuator endpoints (not generated)
 
@@ -531,6 +533,37 @@ paths:
               schema: { $ref: '#/components/schemas/LiveEvent' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /api/v1/assistant/messages:
+    post:
+      tags: [assistant]
+      operationId: askAssistant
+      summary: ask the assistant; the answer is streamed as server-sent events
+      description: |
+        Only browser sessions (cookie + X-XSRF-TOKEN); bot api keys and delegated tokens are rejected.
+        The server keeps no history: the browser sends the dialog each time.
+        Tools are called through the mcp service with a delegated token of the current user,
+        or with mcpKey when it is given.
+        Events: step (tool call), text (answer chunk), done, error; data of each event is AssistantEvent.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssistantRequest' }
+      responses:
+        '200':
+          description: event stream; event name equals AssistantEvent.type
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/AssistantEvent' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/AssistantDisabled' }
+
   /api/v1/admin/users:
     get:
       tags: [users]
@@ -691,7 +724,9 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: bot api key ck_<prefix>_<secret>
+      description: |
+        bot api key ck_<prefix>_<secret>, or a delegated token of a user issued for the assistant
+        (JWT with aud=mcp, short-lived, GET requests with read access only)
     basicAuth:
       type: http
       scheme: basic
@@ -819,6 +854,16 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: rate_limited
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    AssistantDisabled:
+      description: assistant_disabled - no model is configured
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
 
   schemas:
     Problem:
@@ -832,7 +877,8 @@ components:
           type: string
           enum: [unauthenticated, forbidden, local_auth_disabled, invalid_credentials, account_disabled,
                  refresh_invalid, csrf_invalid, not_found, invalid_field, invalid_sort, invalid_filter,
-                 validation_failed, payload_too_large, unsupported_media_type, conflict, last_admin, internal]
+                 validation_failed, payload_too_large, unsupported_media_type, conflict, last_admin, rate_limited,
+                 assistant_disabled, internal]
         detail: { type: string }
         requestId: { type: string }
         errors:
@@ -899,6 +945,7 @@ components:
         scopes:
           type: array
           items: { $ref: '#/components/schemas/ApiKeyScope' }
+        assistantEnabled: { type: boolean, description: 'the assistant is configured and available to this principal' }
 
     RiskLevel:
       type: string
@@ -1492,6 +1539,53 @@ components:
         entity: { type: string }
         mode: { type: string }
         rowsApplied: { type: integer }
+
+    AssistantRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: dialog from the browser, oldest first; the last message has role user
+          items: { $ref: '#/components/schemas/AssistantMessage' }
+        page: { $ref: '#/components/schemas/AssistantPage' }
+        mcpKey:
+          type: string
+          pattern: '^ck_[a-z0-9]{8}_[0-9A-Za-z]{32}$'
+          description: bot api key to call the mcp tools with instead of the delegated token of the user
+
+    AssistantMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string, minLength: 1, maxLength: 4000 }
+
+    AssistantPage:
+      type: object
+      description: where the chat is open
+      properties:
+        route: { type: string, maxLength: 200 }
+        customerId: { type: integer, format: int64 }
+
+    AssistantEvent:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [step, text, done, error] }
+        id: { type: string, description: 'step: call id' }
+        tool: { type: string, description: 'step: mcp tool name' }
+        status: { type: string, enum: [started, done, failed], description: 'step' }
+        summary: { type: string, description: 'step: short result, e.g. row count' }
+        delta: { type: string, description: 'text: next chunk of the answer' }
+        steps: { type: integer, description: 'done: number of tool calls' }
+        code:
+          type: string
+          enum: [assistant_unavailable, assistant_timeout, assistant_key_invalid, assistant_key_forbidden,
+                 assistant_step_limit]
+          description: 'error'
 
     User:
       type: object
