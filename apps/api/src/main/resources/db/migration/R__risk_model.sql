@@ -461,7 +461,7 @@ CREATE TABLE IF NOT EXISTS public.risk_payment_assessments (
 
 CREATE VIEW public.churn_forecast_vw AS
 SELECT r.service_id,r.account_id,r.price,r.payment_term,
-    r.due_at+p.value*interval '24 hours' AS expected_at,
+    r.due_at AS expected_at,
     round(r.risk_score/100,4) AS risk_weight,sc.as_of AS calculated_as_of,sc.model_version
 FROM public.risk_payment_assessments r JOIN public.scores sc ON sc.id=r.score_id AND sc.is_current AND sc.status='scored'
 CROSS JOIN public.model_settings p

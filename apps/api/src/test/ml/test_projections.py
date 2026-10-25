@@ -26,8 +26,8 @@ class ProjectionTest(PostgresFixture):
         self.persist_scores()
         forecast = self.rows('SELECT service_id,expected_at FROM churn_forecast_vw ORDER BY service_id')
         self.assertEqual(forecast, [
-            {'service_id': 104, 'expected_at': '2026-10-22T15:00:00+00:00'},
-            {'service_id': 105, 'expected_at': '2026-10-26T15:00:00+00:00'},
+            {'service_id': 104, 'expected_at': '2026-10-17T15:00:00+00:00'},
+            {'service_id': 105, 'expected_at': '2026-10-21T15:00:00+00:00'},
         ])
         overdue = self.rows('SELECT service_id FROM churn_overdue_vw ORDER BY service_id')
         self.assertEqual(overdue, [{'service_id': 101}, {'service_id': 102}, {'service_id': 103}])
@@ -54,12 +54,16 @@ class ProjectionTest(PostgresFixture):
         self.assertEqual(self.sql('SELECT count(*) FROM churn_overdue_vw;'), '0')
 
     def test_grace_change_requires_fresh_scores_and_updates_deadline(self):
-        self.prepare_forecast()
-        self.assertEqual(self.sql('SELECT expected_at FROM churn_forecast_vw;'), '2026-10-25 15:00:00+00')
-        self.sql("SELECT set_risk_settings('{\"grace_days\":10}', 'analyst');")
+        self.account()
+        self.service(days=-2, auto=False)
+        self.persist_scores()
+        self.assertEqual(self.sql('SELECT expected_at FROM churn_forecast_vw;'), '2026-10-17 15:00:00+00')
+        self.assertEqual(self.sql('SELECT deadline FROM churn_overdue_vw;'), '')
+        self.sql("SELECT set_risk_settings('{\"grace_days\":1}', 'analyst');")
         self.assertEqual(self.sql('SELECT count(*) FROM churn_forecast_vw;'), '0')
         self.persist_scores()
-        self.assertEqual(self.sql('SELECT expected_at FROM churn_forecast_vw;'), '2026-10-30 15:00:00+00')
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_forecast_vw;'), '0')
+        self.assertEqual(self.sql('SELECT deadline FROM churn_overdue_vw;'), '2026-10-18 15:00:00+00')
 
     def test_source_update_withholds_forecast_until_recalculated(self):
         self.prepare_forecast()
