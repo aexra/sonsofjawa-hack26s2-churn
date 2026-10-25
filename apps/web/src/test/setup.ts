@@ -20,6 +20,7 @@ Object.assign(window, {
     apiBaseUrl: 'http://localhost:3000/api/v1',
     docsUrl: '/api/v1/docs',
     grafanaUrl: '',
+    demoUser: '',
   },
 });
 

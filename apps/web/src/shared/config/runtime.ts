@@ -4,6 +4,7 @@ const runtimeConfigSchema = z.object({
   apiBaseUrl: z.string().min(1),
   docsUrl: z.string(),
   grafanaUrl: z.string(),
+  demoUser: z.string().default(''),
 });
 
 type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;

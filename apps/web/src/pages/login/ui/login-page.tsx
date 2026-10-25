@@ -4,6 +4,7 @@ import { Navigate, useSearchParams } from 'react-router';
 
 import { useSession } from '@/entities/session';
 import { LoginForm, SsoButton, useAuthProviders } from '@/features/auth-login';
+import { runtimeConfig } from '@/shared/config/runtime';
 import { ru } from '@/shared/i18n/ru';
 import { safeNextPath } from '@/shared/lib/redirect';
 import { Button } from '@/shared/ui/button';
@@ -112,12 +113,19 @@ export function LoginPage() {
             <p className="m-0 text-ink-muted">{ru.login.localDisabled}</p>
           )}
           {sso && (
-            <SsoButton
-              loginUrl={sso.loginUrl}
-              displayName={sso.name}
-              next={rememberedNext}
-              primary={!localEnabled && !forbidden}
-            />
+            <div className="flex flex-col gap-2">
+              <SsoButton
+                loginUrl={sso.loginUrl}
+                displayName={sso.name}
+                next={rememberedNext}
+                primary={!localEnabled && !forbidden}
+              />
+              {runtimeConfig.demoUser && (
+                <p className="m-0 text-center text-caption text-ink-muted">
+                  {ru.login.demoUser(runtimeConfig.demoUser)}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>

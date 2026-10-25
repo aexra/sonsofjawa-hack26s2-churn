@@ -69,6 +69,7 @@ export const ru = {
     or: 'или',
     ssoName: 'SSO',
     ssoSubmit: (name: string) => `войти через ${name}`,
+    demoUser: (credentials: string) => `демо-юзер: ${credentials}`,
     forbiddenHint: (name: string) =>
       `попросите администратора выдать роль в ${name} или войдите другой учётной записью.`,
     sessionExpired: 'сессия истекла, войдите снова',

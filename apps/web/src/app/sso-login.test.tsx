@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { runtimeConfig } from '@/shared/config/runtime';
 import { server } from '@/test/setup';
 
 import { admin, problem, renderAt, signedInAs } from './test-utils';
@@ -48,6 +49,21 @@ describe('login page with sso', () => {
     expect(screen.getByRole('button', { name: 'войти' })).toBeInTheDocument();
     expect(screen.getByText('или')).toBeInTheDocument();
     expect(link).toHaveClass('border-line-strong');
+    expect(screen.queryByText(/демо-юзер:/)).not.toBeInTheDocument();
+  });
+
+  it('shows a demo user hint under the sso button when configured', async () => {
+    const previous = runtimeConfig.demoUser;
+    Object.assign(runtimeConfig, { demoUser: 'test/test' });
+    try {
+      server.use(...signedOut, bothMethods);
+      renderAt('/login');
+
+      await screen.findByRole('link', { name: 'войти через Keycloak' });
+      expect(screen.getByText('демо-юзер: test/test')).toBeInTheDocument();
+    } finally {
+      Object.assign(runtimeConfig, { demoUser: previous });
+    }
   });
 
   it('shows no sso button when the provider is not configured', async () => {

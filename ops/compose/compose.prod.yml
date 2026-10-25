@@ -35,6 +35,7 @@ services:
       WEB_API_BASE_URL: ${WEB_API_BASE_URL:-/api/v1}
       WEB_DOCS_URL: ${WEB_DOCS_URL:-/api/v1/docs}
       WEB_GRAFANA_URL: ${WEB_GRAFANA_URL:-}
+      WEB_DEMO_USER: ${WEB_DEMO_USER:-}
     depends_on:
       api:
         condition: service_healthy
