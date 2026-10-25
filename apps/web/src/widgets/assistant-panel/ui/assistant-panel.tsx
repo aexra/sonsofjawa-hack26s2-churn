@@ -111,7 +111,7 @@ function AssistantPanelFrame() {
           className="fixed inset-0 z-40 box-border flex flex-col bg-surface outline-none md:left-auto md:w-105 md:border-l md:border-line md:shadow-pop"
         >
           <header className="flex h-header flex-none items-center gap-1 border-b border-line px-4">
-            <div className="mr-auto flex min-w-0 items-center gap-2">
+            <div className="mr-auto flex min-w-0 items-center gap-2 overflow-hidden">
               <DialogPrimitive.Title className="m-0 font-display text-heading text-ink">
                 {ru.assistant.title}
               </DialogPrimitive.Title>
@@ -120,7 +120,7 @@ function AssistantPanelFrame() {
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1.5 px-2"
+              className="shrink-0 gap-1.5 px-2 max-sm:size-9 max-sm:px-0"
               disabled={chat.turns.length === 0}
               onClick={() => {
                 chat.reset();
@@ -129,7 +129,7 @@ function AssistantPanelFrame() {
               }}
             >
               <Plus aria-hidden="true" className="size-4" />
-              {ru.assistant.newDialog}
+              <span className="max-sm:sr-only">{ru.assistant.newDialog}</span>
             </Button>
             <Button
               variant="ghost"

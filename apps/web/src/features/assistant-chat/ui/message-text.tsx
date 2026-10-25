@@ -33,7 +33,7 @@ function InlineContent({ content, onNavigate }: InlineProps) {
             key={index}
             to={`/customers/${part.id}`}
             aria-label={ru.assistant.customerLink(part.id)}
-            className="font-mono text-data text-accent underline-offset-2 hover:underline"
+            className="font-mono text-data text-ink underline decoration-accent decoration-2 underline-offset-3 hover:text-accent"
             onClick={onNavigate}
           >
             #{part.id}
