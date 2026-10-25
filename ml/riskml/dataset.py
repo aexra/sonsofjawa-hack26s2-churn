@@ -48,7 +48,9 @@ def episode(row):
     return row['account_id'], row['service_id'], instant(row['due_at'])
 
 
-def labeled(payload, observed_until):
+def labeled(payload, observed_until, provenance='real'):
+    if provenance not in ('real', 'synthetic'):
+        raise ValueError('training provenance must be real or synthetic')
     cutoff = instant(observed_until)
     outcomes = {}
     for raw in payload.get('outcomes', []):
@@ -61,11 +63,11 @@ def labeled(payload, observed_until):
     observations = sorted((validate(r) for r in payload.get('observations', [])),
                           key=lambda r: (instant(r['as_of']), str(r['model_version'])))
     for row in observations:
-        if row['provenance'] != 'real':
+        if row['provenance'] != provenance:
             rejected['unverified'] += 1
             continue
         end = instant(row['deadline'])
-        candidates = [o for o in outcomes.get(episode(row), []) if o['provenance'] == 'real']
+        candidates = [o for o in outcomes.get(episode(row), []) if o['provenance'] == provenance]
         if end > cutoff or not candidates:
             rejected['censored'] += 1
             continue
@@ -109,3 +111,14 @@ def temporal_split(rows, train_end, calibration_end, test_end):
         elif calibration <= start < end and available <= end:
             parts['test'].append(row)
     return parts
+
+
+def prepare_periods(payload, train_end, calibration_end, test_end, provenance='real'):
+    temporal_split([], train_end, calibration_end, test_end)
+    parts, excluded, available = {}, {}, {}
+    for name, cutoff in zip(('train', 'calibration', 'test'), (train_end, calibration_end, test_end)):
+        rows, rejected = labeled(payload, cutoff, provenance=provenance)
+        parts[name] = temporal_split(rows, train_end, calibration_end, test_end)[name]
+        excluded[name] = rejected
+        available[name] = len(rows)
+    return parts, excluded, available

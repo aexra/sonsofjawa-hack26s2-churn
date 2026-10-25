@@ -19,6 +19,48 @@ class ProjectionTest(PostgresFixture):
         self.assertEqual(row['calculated_as_of'], score['as_of'])
         self.assertGreater(row['risk_weight'], 0)
 
+    def test_overdue_services_do_not_pile_up_in_today_forecast(self):
+        self.account()
+        for service_id, days in ((101, -20), (102, -10), (103, -6), (104, -2), (105, 2)):
+            self.service(service_id=service_id, days=days, auto=False)
+        self.persist_scores()
+        forecast = self.rows('SELECT service_id,expected_at FROM churn_forecast_vw ORDER BY service_id')
+        self.assertEqual(forecast, [
+            {'service_id': 104, 'expected_at': '2026-10-22T15:00:00+00:00'},
+            {'service_id': 105, 'expected_at': '2026-10-26T15:00:00+00:00'},
+        ])
+        overdue = self.rows('SELECT service_id FROM churn_overdue_vw ORDER BY service_id')
+        self.assertEqual(overdue, [{'service_id': 101}, {'service_id': 102}, {'service_id': 103}])
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_history_vw;'), '0')
+        self.assertGreater(self.rows('SELECT expected_loss FROM customer_scores_vw')[0]['expected_loss'], 0)
+
+    def test_grace_boundary_moves_to_overdue_without_waiting_for_recalculation(self):
+        self.account()
+        self.service(days=-4.99, auto=False)
+        self.persist_scores()
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_forecast_vw;'), '1')
+        self.sql("CREATE OR REPLACE FUNCTION public.model_now() RETURNS timestamptz LANGUAGE sql STABLE AS $$ SELECT '2026-10-19T15:15:00Z'::timestamptz $$;")
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_forecast_vw;'), '0')
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_overdue_vw;'), '1')
+
+    def test_zero_grace_and_stale_overdue_records(self):
+        self.account()
+        self.service(days=0, auto=False)
+        self.sql("SELECT set_risk_settings('{\"grace_days\":0}', 'analyst');")
+        self.persist_scores()
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_forecast_vw;'), '0')
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_overdue_vw;'), '1')
+        self.sql('UPDATE accounts SET balance=100 WHERE id=101;')
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_overdue_vw;'), '0')
+
+    def test_grace_change_requires_fresh_scores_and_updates_deadline(self):
+        self.prepare_forecast()
+        self.assertEqual(self.sql('SELECT expected_at FROM churn_forecast_vw;'), '2026-10-25 15:00:00+00')
+        self.sql("SELECT set_risk_settings('{\"grace_days\":10}', 'analyst');")
+        self.assertEqual(self.sql('SELECT count(*) FROM churn_forecast_vw;'), '0')
+        self.persist_scores()
+        self.assertEqual(self.sql('SELECT expected_at FROM churn_forecast_vw;'), '2026-10-30 15:00:00+00')
+
     def test_source_update_withholds_forecast_until_recalculated(self):
         self.prepare_forecast()
         self.sql('UPDATE accounts SET balance=100 WHERE id=101;')

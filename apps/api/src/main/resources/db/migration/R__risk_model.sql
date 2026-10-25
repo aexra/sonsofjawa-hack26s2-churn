@@ -1,4 +1,5 @@
 DROP VIEW IF EXISTS public.churn_forecast_vw;
+DROP VIEW IF EXISTS public.churn_overdue_vw;
 DROP VIEW IF EXISTS public.churn_history_vw;
 DROP VIEW IF EXISTS public.customer_scores_vw;
 DROP VIEW IF EXISTS public.scores_delta_vw;
@@ -459,10 +460,25 @@ CREATE TABLE IF NOT EXISTS public.risk_payment_assessments (
 );
 
 CREATE VIEW public.churn_forecast_vw AS
-SELECT r.service_id,r.account_id,r.price,r.payment_term,greatest(r.due_at,sc.as_of) AS expected_at,
+SELECT r.service_id,r.account_id,r.price,r.payment_term,
+    r.due_at+p.value*interval '24 hours' AS expected_at,
     round(r.risk_score/100,4) AS risk_weight,sc.as_of AS calculated_as_of,sc.model_version
 FROM public.risk_payment_assessments r JOIN public.scores sc ON sc.id=r.score_id AND sc.is_current AND sc.status='scored'
+CROSS JOIN public.model_settings p
 WHERE r.payment_index=0 AND r.risk_score>0
+  AND p.key='grace_days'
+  AND r.due_at+p.value*interval '24 hours'>public.model_now()
+  AND NOT public.risk_projection_stale(sc.account_id,sc.model_version,sc.valid_until);
+
+CREATE VIEW public.churn_overdue_vw AS
+SELECT r.service_id,r.account_id,r.price,r.payment_term,
+    r.due_at+p.value*interval '24 hours' AS deadline,
+    round(r.risk_score/100,4) AS risk_weight,sc.as_of AS calculated_as_of,sc.model_version
+FROM public.risk_payment_assessments r JOIN public.scores sc ON sc.id=r.score_id AND sc.is_current AND sc.status='scored'
+CROSS JOIN public.model_settings p
+WHERE r.payment_index=0 AND r.risk_score>0
+  AND p.key='grace_days'
+  AND r.due_at+p.value*interval '24 hours'<=public.model_now()
   AND NOT public.risk_projection_stale(sc.account_id,sc.model_version,sc.valid_until);
 
 
