@@ -1,0 +1,87 @@
+name: churn
+
+networks:
+  nginx:
+    external: true
+
+services:
+  api:
+    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/api:dev
+    container_name: churn-api
+    restart: unless-stopped
+    networks:
+      - nginx
+    env_file:
+      - .env
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\r\n\r\n' >&3 && grep -q '"status":"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  web:
+    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/app:dev
+    container_name: churn-web
+    restart: unless-stopped
+    networks:
+      - nginx
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM:-http://churn-api:8080}
+      WEB_API_BASE_URL: ${WEB_API_BASE_URL:-/api/v1}
+      WEB_DOCS_URL: ${WEB_DOCS_URL:-/api/v1/docs}
+      WEB_GRAFANA_URL: ${WEB_GRAFANA_URL:-}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ml: &ml
+    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/ml:dev
+    profiles: [ml]
+    restart: "no"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    volumes:
+      - ml_data:/app/ml/reports
+    command:
+      - predict
+      - --model
+      - ${ML_MODEL_PATH:-/app/ml/reports/trained/model.json}
+      - --input
+      - ${ML_PREDICT_INPUT:-/app/ml/reports/requests.json}
+      - --out
+      - ${ML_PREDICT_OUTPUT:-/app/ml/reports/predictions.json}
+
+  ml-train:
+    <<: *ml
+    profiles: [ml-training]
+    command:
+      - train
+      - --input
+      - ${ML_TRAIN_INPUT:-/app/ml/reports/dataset.json}
+      - --train-end
+      - ${ML_TRAIN_END:-}
+      - --calibration-end
+      - ${ML_CALIBRATION_END:-}
+      - --test-end
+      - ${ML_TEST_END:-}
+      - --out-dir
+      - ${ML_TRAIN_OUTPUT:-/app/ml/reports/trained}
+      - --provenance
+      - real
+
+volumes:
+  ml_data:

@@ -8,6 +8,8 @@ TARGET = 'service_nonrenewal_v2'
 
 
 def instant(value):
+    if not isinstance(value, str):
+        raise ValueError('timestamp must be an ISO string')
     result = datetime.fromisoformat(value.replace('Z', '+00:00'))
     if result.tzinfo is None:
         raise ValueError('timestamps must include timezone')
@@ -22,6 +24,14 @@ def finite(value, minimum, maximum):
     return value
 
 
+def validate_features(features):
+    if not isinstance(features, dict) or set(features) != set(FEATURES):
+        raise ValueError('feature schema mismatch')
+    for value in features.values():
+        finite(value, 0, 1)
+    return features
+
+
 def validate(row):
     if row['target'] != TARGET:
         raise ValueError('incompatible prediction target')
@@ -33,10 +43,7 @@ def validate(row):
     as_of, due, deadline = (instant(row[k]) for k in ('as_of', 'due_at', 'deadline'))
     if not as_of < due <= deadline:
         raise ValueError('forecast must precede renewal and deadline')
-    if set(row['features']) != set(FEATURES):
-        raise ValueError('feature schema mismatch')
-    for value in row['features'].values():
-        finite(value, 0, 1)
+    validate_features(row['features'])
     finite(row['heuristic_score'], 0, 100)
     if type(row['amount']) is not int or not 0 < row['amount'] <= 2**63 - 1:
         raise ValueError('amount must be positive integer eurocents')

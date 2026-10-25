@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!requirements.txt
+!riskml/
+!riskml/*.py
+!tests/
+!tests/*.py

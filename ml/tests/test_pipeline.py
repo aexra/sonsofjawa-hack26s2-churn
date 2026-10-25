@@ -144,6 +144,15 @@ class EvaluationTest(unittest.TestCase):
         for name in ('heuristic','logistic','boosting'):
             self.assertEqual(first['results'][name]['test_predictions'],second['results'][name]['test_predictions'])
 
+    def test_later_conflicting_observations_do_not_change_past_training_data(self):
+        data = self.fixture()
+        first = compare(data, '2025-03-01T00:00:00Z', '2025-06-01T00:00:00Z', '2025-09-01T00:00:00Z')
+        data['outcomes'].append(dict(data['outcomes'][0], outcome='blocked',
+                                     event_at='2025-07-01T00:00:00Z', observed_at='2025-07-01T00:00:00Z'))
+        second = compare(data, '2025-03-01T00:00:00Z', '2025-06-01T00:00:00Z', '2025-09-01T00:00:00Z')
+        for name in ('heuristic', 'logistic', 'boosting'):
+            self.assertEqual(first['results'][name]['test_predictions'], second['results'][name]['test_predictions'])
+
 
 if __name__=='__main__':
     unittest.main()
