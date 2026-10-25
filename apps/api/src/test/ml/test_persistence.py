@@ -21,9 +21,9 @@ class PersistenceTest(PostgresFixture):
         self.assertEqual(self.sql('SELECT count(*) FROM delta WHERE proc_date IS NULL;'), '0')
         summary = self.rows('SELECT * FROM analytics_snapshots')[0]
         self.assertEqual(summary['recalc_run_id'], run['run_id'])
-        self.assertEqual(summary['expected_loss'], 681905)
-        self.assertEqual([summary[k] for k in ['accounts_high','accounts_medium','accounts_low','accounts_no_score']], [3,0,3,4])
-        self.assertEqual(summary['services_at_risk'], 11)
+        self.assertEqual(summary['expected_loss'], 15091)
+        self.assertEqual([summary[k] for k in ['accounts_high','accounts_medium','accounts_low','accounts_no_score']], [3,1,2,4])
+        self.assertEqual(summary['services_at_risk'], 12)
         self.assertEqual(self.sql('SELECT status FROM recalc_runs;'), 'ok')
 
     def test_no_work_does_not_create_history_or_runs(self):
@@ -50,9 +50,9 @@ class PersistenceTest(PostgresFixture):
         run = self.recalculate('model')
         self.assertEqual(run['accounts_processed'], 10)
         self.assertGreater(run['model_version'], int(old_version))
-        self.assertEqual(self.sql('SELECT sum(expected_loss) FROM scores WHERE is_current;'), '662652')
+        self.assertEqual(self.sql('SELECT sum(expected_loss) FROM scores WHERE is_current;'), '13240')
         self.assertEqual(self.sql('SELECT count(*) FROM scores WHERE NOT is_current;'), '10')
-        self.assertEqual(self.sql('SELECT risk_score FROM scores WHERE account_id=1 AND NOT is_current;'), '24.98')
+        self.assertEqual(self.sql('SELECT risk_score FROM scores WHERE account_id=1 AND NOT is_current;'), '15.61')
 
     def test_removed_account_does_not_remain_in_summary(self):
         self.account()

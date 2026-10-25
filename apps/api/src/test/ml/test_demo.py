@@ -79,7 +79,8 @@ class DemoModelTest(PostgresFixture):
     def test_balance_change_updates_demo_risk_without_changing_other_clients(self):
         self.fixture(generate_demo())
         self.persist_scores()
-        self.assertEqual(self.sql('SELECT risk_level FROM scores WHERE account_id=12 AND is_current;'), 'medium')
+        before=float(self.sql('SELECT risk_score FROM scores WHERE account_id=12 AND is_current;'))
+        self.assertGreater(before,0)
         others = self.rows('SELECT id FROM scores WHERE account_id<>12 AND is_current ORDER BY id')
         self.sql('UPDATE accounts SET balance=1000000 WHERE id=12;')
         self.persist_scores()

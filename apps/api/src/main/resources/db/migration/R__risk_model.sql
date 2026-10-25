@@ -2,6 +2,8 @@ DROP VIEW IF EXISTS public.churn_forecast_vw;
 DROP VIEW IF EXISTS public.churn_history_vw;
 DROP VIEW IF EXISTS public.customer_scores_vw;
 DROP VIEW IF EXISTS public.scores_delta_vw;
+DROP VIEW IF EXISTS public.risk_payment_scores_vw;
+DROP VIEW IF EXISTS public.risk_payment_inputs_vw;
 
 CREATE OR REPLACE FUNCTION public.term_days(term text) RETURNS numeric
     LANGUAGE sql IMMUTABLE
@@ -118,8 +120,8 @@ INSERT INTO model_settings_declared VALUES
      'максимальный возраст оценки',
      'через сколько часов оценка пересчитывается, даже если данные не менялись', 310),
     ('min_transactions', 'quality', 2, 1, 100, 'count',
-     'минимум транзакций',
-     'меньше подходящих продлений — признак просроченных продлений не учитывается', 320),
+     'достаточность истории',
+     'минимум наблюдавшихся транзакций для отметки достаточности; не изменяет силу сигнала', 320),
     ('payment_overdue_hours', 'quality', 24, 1, 720, 'hours',
      'порог просрочки продления',
      'минимальный возраст продления для учёта неоплаты', 330),
@@ -188,303 +190,196 @@ ON CONFLICT (key) DO UPDATE SET
     reason_template = excluded.reason_template,
     sort_order = excluded.sort_order;
 
-CREATE VIEW public.scores_delta_vw AS
-WITH
-clock AS (
+
+CREATE OR REPLACE FUNCTION public.risk_due_dates(p_due timestamptz, p_term text, p_as_of timestamptz, p_horizon numeric)
+RETURNS TABLE(due_at timestamptz, payment_index integer) LANGUAGE plpgsql STABLE STRICT
+AS $$
+DECLARE
+    v_step interval;
+    v_due timestamptz;
+    v_index integer := 0;
+BEGIN
+    IF p_horizon < 1 OR p_horizon > 365 OR p_horizon::text IN ('NaN','Infinity','-Infinity') THEN
+        RAISE EXCEPTION 'invalid renewal horizon';
+    END IF;
+    v_step := CASE p_term WHEN 'hour' THEN interval '1 hour' WHEN 'week' THEN interval '7 days'
+        WHEN 'month' THEN interval '1 month' WHEN 'quarter_year' THEN interval '3 months'
+        WHEN 'half_year' THEN interval '6 months' WHEN 'year' THEN interval '1 year' END;
+    IF v_step IS NULL THEN RAISE EXCEPTION 'unknown billing period'; END IF;
+    LOOP
+        v_due := ((p_due AT TIME ZONE 'UTC') + v_index * v_step) AT TIME ZONE 'UTC';
+        EXIT WHEN v_due >= p_as_of + p_horizon * interval '24 hours';
+        due_at := v_due;
+        payment_index := v_index;
+        RETURN NEXT;
+        EXIT WHEN p_due < p_as_of;
+        v_index := v_index + 1;
+    END LOOP;
+END
+$$;
+
+
+CREATE OR REPLACE FUNCTION public.risk_horizon_boundary(p_due timestamptz,p_term text,p_as_of timestamptz,p_horizon numeric)
+RETURNS timestamptz LANGUAGE sql STABLE STRICT AS $$
+    SELECT CASE WHEN p_due<p_as_of THEN NULL ELSE (
+        (p_due AT TIME ZONE 'UTC')+(SELECT count(*) FROM public.risk_due_dates(p_due,p_term,p_as_of,p_horizon))*
+        CASE p_term WHEN 'hour' THEN interval '1 hour' WHEN 'week' THEN interval '7 days'
+            WHEN 'month' THEN interval '1 month' WHEN 'quarter_year' THEN interval '3 months'
+            WHEN 'half_year' THEN interval '6 months' WHEN 'year' THEN interval '1 year' END
+    ) AT TIME ZONE 'UTC' - p_horizon*interval '24 hours'+interval '1 millisecond' END
+$$;
+
+CREATE OR REPLACE FUNCTION public.risk_group_contributions(p_values numeric[], p_weights numeric[])
+RETURNS numeric[] LANGUAGE plpgsql IMMUTABLE STRICT
+AS $$
+DECLARE
+    v_budget numeric;
+    v_winner integer := 1;
+    v_i integer;
+    v_result numeric[] := ARRAY[0,0,0,0,0,0]::numeric[];
+BEGIN
+    PERFORM public.risk_normalized_score(p_values, p_weights);
+    IF cardinality(p_values) <> 6 THEN RAISE EXCEPTION 'six known features required'; END IF;
+    v_budget := greatest(p_weights[1],p_weights[2],p_weights[3],p_weights[6]) + p_weights[4] + p_weights[5];
+    FOREACH v_i IN ARRAY ARRAY[2,3,6] LOOP
+        IF p_values[v_i]*p_weights[v_i] > p_values[v_winner]*p_weights[v_winner] THEN v_winner := v_i; END IF;
+    END LOOP;
+    FOREACH v_i IN ARRAY ARRAY[v_winner,4,5] LOOP
+        v_result[v_i] := 100*p_values[v_i]*p_weights[v_i]/v_budget;
+    END LOOP;
+    RETURN v_result;
+END
+$$;
+
+CREATE VIEW public.risk_payment_inputs_vw AS
+WITH p AS (
     SELECT public.model_now() AS as_of,
-           now() AS calculated_at,
-           (SELECT max(version) FROM public.model_revisions) AS model_version
-),
-p AS (
-    SELECT
-        max(value) FILTER (WHERE key = 'horizon_days') AS horizon_days,
-        max(value) FILTER (WHERE key = 'grace_days') AS grace_days,
-        max(value) FILTER (WHERE key = 'level_high') AS level_high,
-        max(value) FILTER (WHERE key = 'level_medium') AS level_medium,
-        max(value) FILTER (WHERE key = 'max_score_age_hours') AS max_age_hours,
-        max(value) FILTER (WHERE key = 'min_transactions') AS min_transactions,
-        max(value) FILTER (WHERE key = 'payment_overdue_hours') AS payment_overdue_hours,
-        max(value) FILTER (WHERE key = 'payment_lookback_days') AS payment_lookback_days
+        max(value) FILTER (WHERE key='horizon_days') AS horizon,
+        max(value) FILTER (WHERE key='grace_days') AS grace,
+        max(value) FILTER (WHERE key='payment_overdue_hours') AS overdue,
+        max(value) FILTER (WHERE key='payment_lookback_days') AS lookback
     FROM public.model_settings
-),
-w AS (
-    SELECT f.key, s.value AS weight
-    FROM public.model_features f
-    JOIN public.model_settings s ON s.key = f.weight_key
-),
-w_total AS (
-    SELECT coalesce(sum(weight), 0) AS total FROM w
-),
-batch AS (
-    SELECT DISTINCT account_id FROM public.delta WHERE proc_date IS NULL
-),
-svc AS (
-    SELECT
-        s.id,
-        s.name,
-        s."ownerId" AS account_id,
-        s."autoProlong" AS auto_prolong,
-        s."expiresAt" AS expires_at,
-        s.status,
-        s.price,
-        s.status IN ('active', 'suspended', 'prolong_wait') AS is_live,
-        public.term_days(s."paymentTerm") AS term_days,
-        CASE WHEN s.status = 'prolong_wait' THEN 0
-             ELSE greatest(extract(epoch FROM s."expiresAt" - c.as_of) / 86400.0, 0)
-        END AS days_left,
-        s.status IN ('active', 'suspended') AND s."expiresAt" <= c.as_of AS expired_but_live,
-        s.status = 'prolong_wait' AND s."expiresAt" + p.grace_days * interval '1 day' <= c.as_of AS overdue_prolong_wait,
-        (SELECT min(x) FROM unnest(ARRAY[
-            s."expiresAt",
-            s."expiresAt" + p.grace_days * interval '1 day'
-        ]) AS x WHERE x > c.as_of) AS next_boundary
-    FROM public.services s
-    JOIN batch b ON b.account_id = s."ownerId"
-    CROSS JOIN clock c
+), raw AS (
+    SELECT a.id AS account_id, s.id AS service_id, s.name, s.status, s."autoProlong" AS auto_prolong,
+        s."paymentTerm" AS payment_term, s.price, d.due_at, d.payment_index,
+        a.balance::numeric + CASE WHEN a."bonusState"='unlocked' THEN a."bonusBalance"::numeric ELSE 0 END AS funds,
+        p.*,
+        least(greatest((exp(-greatest(extract(epoch FROM d.due_at-p.as_of)/86400,0)/(p.horizon/3))
+            -exp(-3))/(1-exp(-3)),0),1) AS urgency,
+        1-exp(-greatest(extract(epoch FROM p.as_of-d.due_at)/86400,0)/greatest(p.grace,1)) AS late_severity,
+        (SELECT count(*) FILTER (WHERE h.status='deleted')::numeric/nullif(count(*),0)
+         FROM public.services h WHERE h."ownerId"=a.id AND h.status<>'blocked') AS termination_share
+    FROM public.services s JOIN public.accounts a ON a.id=s."ownerId"
     CROSS JOIN p
-),
-svc2 AS (
-    SELECT
-        svc.*,
-        CASE WHEN is_live THEN least(greatest(1 - days_left / p.horizon_days, 0), 1) ELSE 0 END AS urgency,
-        CASE WHEN is_live THEN price * p.horizon_days / term_days ELSE 0 END AS revenue_h,
-        CASE WHEN NOT is_live OR days_left >= p.horizon_days THEN 0
-             ELSE ceil((p.horizon_days - days_left) / term_days)
-        END AS renewals_h
-    FROM svc CROSS JOIN p
-),
-svc3 AS (
-    SELECT
-        svc2.*,
-        CASE WHEN is_live AND status <> 'prolong_wait' AND expires_at >= c.as_of
-             THEN c.as_of
-                  + (renewals_h * term_days - (p.horizon_days - days_left)) * interval '1 day'
-                  + interval '1 millisecond'
-        END AS next_renewal_boundary
-    FROM svc2 CROSS JOIN clock c CROSS JOIN p
-),
-agg AS (
-    SELECT
-        account_id,
-        count(*) AS services_total,
-        count(*) FILTER (WHERE is_live) AS services_live,
-        count(*) FILTER (WHERE status = 'deleted') AS services_terminated,
-        count(*) FILTER (WHERE status <> 'blocked') AS services_considered,
-        count(*) FILTER (WHERE status = 'prolong_wait') AS services_prolong_wait,
-        count(*) FILTER (WHERE status = 'suspended') AS services_suspended,
-        coalesce(sum(revenue_h), 0) AS revenue_h,
-        coalesce(sum(revenue_h) FILTER (WHERE status = 'suspended'), 0) AS revenue_suspended,
-        coalesce(sum(revenue_h) FILTER (WHERE auto_prolong AND status <> 'prolong_wait'), 0) AS revenue_auto,
-        coalesce(sum(price * renewals_h), 0) AS required_h,
-        min(expires_at) FILTER (WHERE is_live AND status <> 'prolong_wait' AND days_left > 0) AS next_expiry_at,
-        least(min(next_boundary) FILTER (WHERE is_live), min(next_renewal_boundary)) AS next_boundary,
-        bool_or(expired_but_live) AS any_expired_but_live,
-        bool_or(overdue_prolong_wait) AS any_overdue_prolong_wait
-    FROM svc3
-    GROUP BY account_id
-),
-top_unsecured AS (
-    SELECT DISTINCT ON (account_id) account_id, id AS service_id, name AS service_name, days_left, urgency
-    FROM svc2
-    WHERE is_live AND (NOT auto_prolong OR status = 'prolong_wait') AND urgency > 0
-    ORDER BY account_id, urgency DESC, price DESC, id
-),
-tx_candidates AS (
-    SELECT s."ownerId" AS account_id, t.status, t."createdAt" AS created_at,
-           t."createdAt" <= c.as_of - p.payment_overdue_hours * interval '1 hour'
-               AND (t.status <> 'performed' OR t."performedAt" <= c.as_of) AS mature,
-           t."performedAt" AS performed_at,
-           c.as_of,
-           p.payment_overdue_hours, p.payment_lookback_days
-    FROM public.transactions t
-    JOIN public.services s ON s.id = t."serviceId"
-    JOIN batch b ON b.account_id = s."ownerId"
-    CROSS JOIN clock c
-    CROSS JOIN p
-    WHERE t.type = 'prolong'
-      AND s.status IN ('active', 'suspended', 'prolong_wait')
-      AND t."createdAt" <= c.as_of + p.max_age_hours * interval '1 hour'
-      AND t."createdAt" > c.as_of - p.payment_lookback_days * interval '1 day'
-),
-tx AS (
-    SELECT account_id,
-           count(*) FILTER (WHERE mature) AS total,
-           count(*) FILTER (WHERE mature AND status = 'not_performed') AS failed,
-           min((SELECT min(boundary)
-                FROM unnest(ARRAY[
-                    created_at + payment_overdue_hours * interval '1 hour',
-                    created_at + payment_lookback_days * interval '1 day',
-                    performed_at
-                ]) AS boundary WHERE boundary > as_of)) AS next_boundary
-    FROM tx_candidates
-    GROUP BY account_id
-),
-base AS (
-    SELECT
-        b.account_id,
-        a.id IS NOT NULL AS account_exists,
-        coalesce(a.balance, 0) AS balance,
-        coalesce(a."withdrawBalance", 0) AS withdraw_balance,
-        coalesce(a."totalReplenished", 0) AS total_replenished,
-        coalesce(a.balance, 0)::numeric
-            + CASE WHEN a."bonusState" = 'unlocked' THEN a."bonusBalance"::numeric ELSE 0 END AS funds,
-        coalesce(g.services_total, 0) AS services_total,
-        coalesce(g.services_live, 0) AS services_live,
-        coalesce(g.services_terminated, 0) AS services_terminated,
-        coalesce(g.services_considered, 0) AS services_considered,
-        coalesce(g.services_prolong_wait, 0) AS services_prolong_wait,
-        coalesce(g.services_suspended, 0) AS services_suspended,
-        coalesce(g.revenue_h, 0) AS revenue_h,
-        coalesce(g.revenue_suspended, 0) AS revenue_suspended,
-        coalesce(g.revenue_auto, 0) AS revenue_auto,
-        coalesce(g.required_h, 0) AS required_h,
-        g.next_expiry_at,
-        least(g.next_boundary, tx.next_boundary) AS next_boundary,
-        coalesce(g.any_expired_but_live, false) AS any_expired_but_live,
-        coalesce(g.any_overdue_prolong_wait, false) AS any_overdue_prolong_wait,
-        te.service_id AS top_service_id,
-        te.service_name AS top_service_name,
-        te.days_left AS top_days_left,
-        coalesce(te.urgency, 0) AS top_urgency,
-        coalesce(tx.total, 0) AS tx_total,
-        coalesce(tx.failed, 0) AS tx_failed
-    FROM batch b
-    LEFT JOIN public.accounts a ON a.id = b.account_id
-    LEFT JOIN agg g ON g.account_id = b.account_id
-    LEFT JOIN top_unsecured te ON te.account_id = b.account_id
-    LEFT JOIN tx ON tx.account_id = b.account_id
-),
-feat AS (
-    SELECT
-        base.*,
-        top_urgency AS f_renewal_unsecured,
-        CASE WHEN required_h > 0 THEN least(greatest(1 - funds / required_h, 0), 1) ELSE 0 END AS f_insufficient_funds,
-        CASE WHEN services_prolong_wait > 0 AND services_live > 0
-             THEN 0.5 + 0.5 * services_prolong_wait::numeric / services_live ELSE 0 END AS f_prolong_wait,
-        CASE WHEN revenue_h > 0 THEN revenue_suspended / revenue_h ELSE 0 END AS f_suspended_share,
-        CASE WHEN services_considered > 0 THEN services_terminated::numeric / services_considered ELSE 0 END AS f_termination_history,
-        CASE WHEN tx_total >= p.min_transactions THEN tx_failed::numeric / tx_total ELSE 0 END AS f_payment_failures
-    FROM base CROSS JOIN p
-),
-scored AS (
-    SELECT
-        feat.*,
-        r.reasons,
-        r.features,
-        public.risk_normalized_score(r.feature_values, r.feature_weights) AS score
-    FROM feat
-    CROSS JOIN w_total wt
-    CROSS JOIN p
-    CROSS JOIN LATERAL (
-        SELECT
-            coalesce(
-                jsonb_agg(
-                    jsonb_build_object(
-                        'key', v.key,
-                        'value', round(v.f, 4),
-                        'weight', w.weight,
-                        'contribution', round(w.weight * v.f / nullif(wt.total, 0) * 100, 2),
-                        'params', v.params
-                    )
-                    ORDER BY w.weight * v.f DESC, v.key
-                ) FILTER (WHERE w.weight * v.f > 0),
-                '[]'::jsonb
-            ) AS reasons,
-            coalesce(jsonb_object_agg(v.key, round(v.f, 4)), '{}'::jsonb) AS features,
-            array_agg(v.f ORDER BY v.key) AS feature_values,
-            array_agg(w.weight ORDER BY v.key) AS feature_weights
-        FROM (VALUES
-            ('renewal_unsecured', feat.f_renewal_unsecured, jsonb_build_object(
-                'serviceId', feat.top_service_id,
-                'serviceName', feat.top_service_name,
-                'daysLeft', round(coalesce(feat.top_days_left, 0), 1),
-                'deadline', CASE WHEN coalesce(feat.top_days_left, 0) = 0 THEN 'срок истёк'
-                                 WHEN feat.top_days_left < 1
-                                 THEN 'срок истекает через ' || ceil(feat.top_days_left * 24) || ' ч'
-                                 ELSE 'срок истекает через '
-                                      || replace(round(feat.top_days_left, 1)::text, '.', ',') || ' дн.' END)),
-            ('insufficient_funds', feat.f_insufficient_funds, jsonb_build_object(
-                'fundsAmount', feat.funds,
-                'requiredAmount', round(feat.required_h),
-                'coveragePct', CASE WHEN feat.required_h > 0
-                                    THEN least(round(feat.funds / feat.required_h * 100), 100) ELSE 100 END,
-                'horizonDays', p.horizon_days)),
-            ('prolong_wait', feat.f_prolong_wait, jsonb_build_object(
-                'count', feat.services_prolong_wait,
-                'live', feat.services_live)),
-            ('suspended_share', feat.f_suspended_share, jsonb_build_object(
-                'count', feat.services_suspended,
-                'live', feat.services_live,
-                'sharePct', round(feat.f_suspended_share * 100))),
-            ('termination_history', feat.f_termination_history, jsonb_build_object(
-                'count', feat.services_terminated,
-                'total', feat.services_considered)),
-            ('payment_failures', feat.f_payment_failures, jsonb_build_object(
-                'count', feat.tx_failed,
-                'total', feat.tx_total,
-                'overdueHours', p.payment_overdue_hours,
-                'lookbackDays', p.payment_lookback_days))
-        ) AS v(key, f, params)
-        RIGHT JOIN w ON w.key = v.key
-    ) r
-),
-final AS (
-    SELECT
-        s.*,
-        CASE
-            WHEN NOT s.account_exists THEN 'removed'
-            WHEN s.services_total = 0 THEN 'no_score'
-            WHEN s.services_live = 0 THEN 'no_score'
-            ELSE 'scored'
-        END AS status,
-        CASE
-            WHEN NOT s.account_exists THEN NULL
-            WHEN s.services_total = 0 THEN 'no_services'
-            WHEN s.services_live = 0 THEN 'no_live_services'
-        END AS no_score_reason
-    FROM scored s
-),
-assessed AS (
-    SELECT f.*, m.revenue_horizon, m.secured_amount, m.expected_loss
-    FROM final f
-    CROSS JOIN LATERAL public.risk_money_estimate(f.revenue_h, f.revenue_auto, f.funds, f.score) m
+    CROSS JOIN LATERAL public.risk_due_dates(s."expiresAt",s."paymentTerm",p.as_of,p.horizon) d
+    WHERE s.status IN ('active','suspended','prolong_wait') AND s."createdAt"<=p.as_of
+), allocated AS (
+    SELECT raw.*, least(price::numeric,greatest(funds-coalesce(sum(price::numeric) OVER (
+        PARTITION BY account_id ORDER BY due_at,service_id,payment_index ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0),0)) AS allocated
+    FROM raw
+), tx AS (
+    SELECT s.id AS service_id,
+        count(*) AS total,
+        max(CASE WHEN t.status='not_performed' OR t."performedAt">p.as_of
+            THEN 1-exp(-greatest(extract(epoch FROM p.as_of-t."createdAt")/3600-p.overdue,0)/p.overdue)
+            ELSE 0 END) AS severity
+    FROM public.transactions t JOIN public.services s ON s.id=t."serviceId" CROSS JOIN p
+    WHERE t.type='prolong' AND t."createdAt"<=p.as_of
+      AND t."createdAt">p.as_of-p.lookback*interval '24 hours'
+    GROUP BY s.id
 )
-SELECT
-    f.account_id,
-    c.calculated_at,
-    c.as_of,
-    c.model_version,
-    f.status,
-    f.no_score_reason,
-    CASE WHEN f.status = 'scored' THEN f.score END AS risk_score,
-    CASE WHEN f.status = 'scored' THEN public.risk_level(f.score, p.level_medium, p.level_high) END AS risk_level,
-    CASE WHEN f.status = 'scored' THEN f.revenue_horizon END AS revenue_horizon,
-    CASE WHEN f.status = 'scored' THEN f.secured_amount END AS secured_amount,
-    CASE WHEN f.status = 'scored' THEN f.expected_loss END AS expected_loss,
-    f.services_total::integer AS services_total,
-    f.services_live::integer AS services_live,
-    CASE WHEN f.status = 'scored' THEN (
-        SELECT count(*)::integer
-        FROM svc2 x
-        WHERE x.account_id = f.account_id
-          AND x.is_live
-          AND (x.status = 'prolong_wait' OR x.urgency > 0)
-          AND (x.status = 'prolong_wait' OR NOT x.auto_prolong OR f.f_insufficient_funds > 0)
-    ) ELSE 0 END AS services_at_risk,
-    f.next_expiry_at,
-    CASE WHEN f.status = 'scored' THEN f.reasons ELSE '[]'::jsonb END AS reasons,
-    CASE WHEN f.status = 'scored' THEN f.features ELSE '{}'::jsonb END AS features,
-    array_remove(ARRAY[
-        CASE WHEN f.any_expired_but_live THEN 'expired_but_live' END,
-        CASE WHEN f.any_overdue_prolong_wait THEN 'overdue_prolong_wait' END,
-        CASE WHEN f.balance > f.total_replenished THEN 'balance_exceeds_replenished' END
-    ], NULL) AS anomalies,
-    CASE WHEN f.status = 'scored'
-         THEN least(f.next_boundary, c.as_of + p.max_age_hours * interval '1 hour') END AS valid_until,
+SELECT a.*, coalesce(tx.total,0) AS transactions_observed,
+    ARRAY[
+        CASE WHEN NOT auto_prolong THEN urgency ELSE 0 END,
+        CASE WHEN price>0 THEN (1-allocated/price)*urgency ELSE 0 END,
+        late_severity,
+        CASE WHEN status='suspended' THEN 1 ELSE 0 END,
+        coalesce(termination_share,0), coalesce(tx.severity,0)
+    ]::numeric[] AS feature_values
+FROM allocated a LEFT JOIN tx ON tx.service_id=a.service_id;
+
+CREATE VIEW public.risk_payment_scores_vw AS
+WITH w AS (
+    SELECT array_agg(s.value ORDER BY x.ord) AS weights
+    FROM unnest(ARRAY['renewal_unsecured','insufficient_funds','prolong_wait','suspended_share','termination_history','payment_failures']) WITH ORDINALITY x(key,ord)
+    LEFT JOIN public.model_features f ON f.key=x.key
+    LEFT JOIN public.model_settings s ON s.key=f.weight_key
+), c AS (
+    SELECT i.*, w.weights, public.risk_group_contributions(i.feature_values,w.weights) AS contributions
+    FROM public.risk_payment_inputs_vw i CROSS JOIN w
+)
+SELECT c.*, (SELECT sum(v) FROM unnest(contributions) v) AS risk_score,
+    round(price*(SELECT sum(v) FROM unnest(contributions) v)/100)::bigint AS risk_amount
+FROM c;
+
+CREATE VIEW public.scores_delta_vw AS
+WITH clock AS (
+    SELECT public.model_now() AS as_of, now() AS calculated_at,
+        (SELECT max(version) FROM public.model_revisions) AS model_version
+), p AS (
+    SELECT max(value) FILTER (WHERE key='level_high') AS high,
+        max(value) FILTER (WHERE key='level_medium') AS medium,
+        max(value) FILTER (WHERE key='max_score_age_hours') AS max_age,
+        max(value) FILTER (WHERE key='grace_days') AS grace,
+        max(value) FILTER (WHERE key='horizon_days') AS horizon
+    FROM public.model_settings
+), batch AS (
+    SELECT DISTINCT account_id FROM public.delta WHERE proc_date IS NULL
+), payments AS (
+    SELECT r.* FROM public.risk_payment_scores_vw r JOIN batch b USING(account_id)
+), aggregated AS (
+    SELECT account_id, sum(price)::bigint AS revenue, sum(allocated)::bigint AS covered,
+        sum(risk_amount)::bigint AS risk_amount,
+        CASE WHEN sum(price)>0 THEN sum(risk_score*price)/sum(price) ELSE avg(risk_score) END AS score,
+        count(DISTINCT service_id) FILTER (WHERE risk_score>0) AS at_risk,
+        min(due_at) FILTER (WHERE due_at>as_of) AS next_due
+    FROM payments GROUP BY account_id
+), components AS (
+    SELECT account_id, n, max(weights[n]) AS weight,
+        CASE WHEN sum(price)>0 THEN sum(feature_values[n]*price)/sum(price) ELSE avg(feature_values[n]) END AS value,
+        CASE WHEN sum(price)>0 THEN sum(contributions[n]*price)/sum(price) ELSE avg(contributions[n]) END AS contribution
+    FROM payments CROSS JOIN generate_series(1,6) n GROUP BY account_id,n
+), examples AS (
+    SELECT DISTINCT ON (account_id,n) account_id,n,service_id,name,price,allocated
+    FROM payments CROSS JOIN generate_series(1,6) n
+    ORDER BY account_id,n,contributions[n]*price DESC,due_at,service_id
+), reasons AS (
+    SELECT c.account_id,
+        jsonb_object_agg(k.key,round(c.value,4)) AS features,
+        coalesce(jsonb_agg(jsonb_build_object('key',k.key,'value',round(c.value,4),'weight',c.weight,
+            'contribution',round(c.contribution,2),'params',jsonb_build_object('signalPct',round(c.value*100),'serviceId',e.service_id,'serviceName',e.name,'requiredAmount',e.price,'allocatedAmount',e.allocated))
+            ORDER BY c.contribution DESC,k.key) FILTER (WHERE c.contribution>0),'[]'::jsonb) AS reasons
+    FROM components c JOIN unnest(ARRAY['renewal_unsecured','insufficient_funds','prolong_wait','suspended_share','termination_history','payment_failures']) WITH ORDINALITY k(key,n) USING(n)
+    JOIN examples e ON e.account_id=c.account_id AND e.n=c.n
+    GROUP BY c.account_id
+), base AS (
+    SELECT b.account_id, a.id IS NOT NULL AS exists, a.balance, a."totalReplenished" AS replenished,
+        count(s.id) AS total, count(s.id) FILTER (WHERE s.status IN ('active','suspended','prolong_wait')) AS live,
+        bool_or(s.status IN ('active','suspended') AND s."expiresAt"<c.as_of) AS expired,
+        bool_or(s.status='prolong_wait' AND s."expiresAt"+p.grace*interval '24 hours'<=c.as_of) AS overdue,
+        min(public.risk_horizon_boundary(s."expiresAt",s."paymentTerm",c.as_of,p.horizon)) FILTER (WHERE s.status IN ('active','suspended','prolong_wait')) AS boundary
+    FROM batch b LEFT JOIN public.accounts a ON a.id=b.account_id
+    LEFT JOIN public.services s ON s."ownerId"=b.account_id AND s."createdAt"<=public.model_now()
+    CROSS JOIN clock c CROSS JOIN p
+    GROUP BY b.account_id,a.id,a.balance,a."totalReplenished"
+)
+SELECT b.account_id,c.calculated_at,c.as_of,c.model_version,
+    CASE WHEN NOT b.exists THEN 'removed' WHEN b.live=0 THEN 'no_score' ELSE 'scored' END AS status,
+    CASE WHEN NOT b.exists THEN NULL WHEN b.total=0 THEN 'no_services' WHEN b.live=0 THEN 'no_live_services' END AS no_score_reason,
+    CASE WHEN b.live>0 THEN round(coalesce(g.score,0),2) END AS risk_score,
+    CASE WHEN b.live>0 THEN public.risk_level(coalesce(g.score,0),p.medium,p.high) END AS risk_level,
+    CASE WHEN b.live>0 THEN coalesce(g.revenue,0) END AS revenue_horizon,
+    CASE WHEN b.live>0 THEN coalesce(g.covered,0) END AS secured_amount,
+    CASE WHEN b.live>0 THEN coalesce(g.risk_amount,0) END AS expected_loss,
+    b.total::integer AS services_total,b.live::integer AS services_live,coalesce(g.at_risk,0)::integer AS services_at_risk,
+    g.next_due AS next_expiry_at,coalesce(r.reasons,'[]'::jsonb) AS reasons,
+    CASE WHEN b.live=0 THEN '{}'::jsonb ELSE coalesce(r.features,jsonb_build_object('renewal_unsecured',0,'insufficient_funds',0,'prolong_wait',0,'suspended_share',0,'termination_history',0,'payment_failures',0)) END AS features,
+    array_remove(ARRAY[CASE WHEN b.expired THEN 'expired_but_live' END,
+        CASE WHEN b.overdue THEN 'overdue_prolong_wait' END,
+        CASE WHEN b.balance>b.replenished THEN 'balance_exceeds_replenished' END],NULL) AS anomalies,
+    CASE WHEN b.live>0 THEN least(g.next_due,b.boundary,c.as_of+least(p.max_age,1)*interval '1 hour') END AS valid_until,
     true AS is_current
-FROM assessed f
-CROSS JOIN clock c
-CROSS JOIN p;
+FROM base b CROSS JOIN clock c CROSS JOIN p LEFT JOIN aggregated g USING(account_id) LEFT JOIN reasons r USING(account_id);
 
 CREATE OR REPLACE FUNCTION public.risk_projection_stale(
     p_account_id bigint, p_model_version bigint, p_valid_until timestamptz
@@ -543,57 +438,33 @@ SELECT
     s."ownerId" AS account_id,
     s.price,
     s."paymentTerm" AS payment_term,
-    s."expiresAt" + p.grace_days * interval '1 day' AS deleted_at,
+    s."expiresAt" + p.grace_days * interval '24 hours' AS deleted_at,
     true AS estimated
 FROM public.services s
 CROSS JOIN (SELECT value AS grace_days FROM public.model_settings WHERE key = 'grace_days') p
 WHERE s.status = 'deleted'
-  AND s."expiresAt" + p.grace_days * interval '1 day' <= public.model_now()
+  AND s."expiresAt" + p.grace_days * interval '24 hours' <= public.model_now()
   AND NOT EXISTS (
       SELECT 1 FROM public.service_status_history h
       WHERE h.service_id=s.id AND h.to_status='deleted' AND h.from_status IS NOT NULL
   );
 
+
+CREATE TABLE IF NOT EXISTS public.risk_payment_assessments (
+    score_id bigint NOT NULL, service_id bigint NOT NULL, account_id bigint NOT NULL,
+    due_at timestamptz NOT NULL, payment_index integer NOT NULL, price bigint NOT NULL,
+    payment_term text NOT NULL, risk_score numeric NOT NULL, allocated numeric NOT NULL,
+    transactions_observed integer NOT NULL,
+    PRIMARY KEY(score_id,service_id,due_at)
+);
+
 CREATE VIEW public.churn_forecast_vw AS
-WITH
-c AS (SELECT public.model_now() AS as_of),
-p AS (
-    SELECT
-        max(value) FILTER (WHERE key = 'horizon_days') AS horizon_days,
-        max(value) FILTER (WHERE key = 'grace_days') AS grace_days
-    FROM public.model_settings
-),
-x AS (
-    SELECT
-        s.id AS service_id,
-        s."ownerId" AS account_id,
-        s.price,
-        s."paymentTerm" AS payment_term,
-        CASE WHEN s.status = 'prolong_wait'
-             THEN greatest(s."expiresAt" + p.grace_days * interval '1 day', c.as_of)
-             ELSE greatest(s."expiresAt", c.as_of)
-        END AS expected_at,
-        sc.risk_score / 100.0 * CASE
-            WHEN s."autoProlong" AND s.status <> 'prolong_wait'
-            THEN coalesce((sc.features ->> 'insufficient_funds')::numeric, 0)
-            ELSE 1
-        END AS risk_weight,
-        sc.as_of AS calculated_as_of,
-        sc.model_version,
-        c.as_of,
-        p.horizon_days
-    FROM public.services s
-    JOIN public.scores sc ON sc.account_id = s."ownerId" AND sc.is_current AND sc.status = 'scored'
-    CROSS JOIN c
-    CROSS JOIN p
-    WHERE s.status IN ('active', 'suspended', 'prolong_wait')
-      AND NOT public.risk_projection_stale(sc.account_id, sc.model_version, sc.valid_until)
-)
-SELECT service_id, account_id, price, payment_term, expected_at, round(risk_weight, 4) AS risk_weight,
-       calculated_as_of, model_version
-FROM x
-WHERE expected_at < as_of + horizon_days * interval '1 day'
-  AND risk_weight > 0;
+SELECT r.service_id,r.account_id,r.price,r.payment_term,greatest(r.due_at,sc.as_of) AS expected_at,
+    round(r.risk_score/100,4) AS risk_weight,sc.as_of AS calculated_as_of,sc.model_version
+FROM public.risk_payment_assessments r JOIN public.scores sc ON sc.id=r.score_id AND sc.is_current AND sc.status='scored'
+WHERE r.payment_index=0 AND r.risk_score>0
+  AND NOT public.risk_projection_stale(sc.account_id,sc.model_version,sc.valid_until);
+
 
 INSERT INTO public.model_revisions (changed_by, source, changes)
 VALUES ('system', 'migration', jsonb_build_array(jsonb_build_object('file', 'R__risk_model.sql')));
@@ -607,8 +478,8 @@ SELECT
     100 AS minor_units_per_currency,
     (SELECT value FROM public.model_settings WHERE key = 'horizon_days') AS horizon_days,
     'оценка выручки под риском'::text AS money_title,
-    'взвешенная по эвристическому score часть тарифной выручки за горизонт, не покрытая доступными средствами для автопродления; не прогноз фактических убытков'::text AS money_description,
-    'risk-score от 0 до 100 — приоритет внимания, а не вероятность ухода; веса относительные'::text AS score_description,
+    'сумма платежей за горизонт, взвешенных по эвристическому риску каждой услуги; покрытие баланса — резервирование, не гарантия оплаты; не прогноз убытков'::text AS money_description,
+    'risk-score от 0 до 100 — приоритет проверки непродлений; пересекающиеся платёжные сигналы объединены максимумом; не вероятность ухода'::text AS score_description,
     (SELECT max(version) FROM public.model_revisions) AS model_version;
 
 CREATE OR REPLACE FUNCTION public.set_risk_settings(p_values jsonb, p_actor text)
@@ -680,7 +551,9 @@ BEGIN
         RETURN QUERY SELECT NULL::bigint, 'busy'::text, 0, v_version, v_as_of;
         RETURN;
     END IF;
-    IF v_version IS NULL OR NOT EXISTS (
+    IF (SELECT count(*) FROM public.model_features)<>6 OR EXISTS (
+        SELECT 1 FROM public.model_features WHERE key NOT IN ('renewal_unsecured','insufficient_funds','prolong_wait','suspended_share','termination_history','payment_failures')
+    ) OR v_version IS NULL OR NOT EXISTS (
         SELECT 1 FROM public.model_features f JOIN public.model_settings s ON s.key=f.weight_key WHERE s.value>0
     ) THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'risk model requires a revision and positive registered feature weights';
@@ -743,3 +616,121 @@ BEGIN
     RETURN QUERY SELECT v_run, 'ok'::text, v_count, v_version, v_as_of;
 END
 $$;
+
+UPDATE public.model_features SET reason_template=CASE key
+    WHEN 'renewal_unsecured' THEN 'ручное продление: сигнал {signalPct}%; например, услуга {serviceName}'
+    WHEN 'insufficient_funds' THEN 'нехватка средств: сигнал {signalPct}%; платёж {serviceName} — {requiredAmount}, зарезервировано {allocatedAmount}'
+    WHEN 'prolong_wait' THEN 'задержка продления: сигнал {signalPct}%; например, услуга {serviceName}'
+    WHEN 'suspended_share' THEN 'приостановленные услуги: {signalPct}% платежей'
+    WHEN 'termination_history' THEN 'удалено {signalPct}% учитываемых услуг; блокировки исключены'
+    WHEN 'payment_failures' THEN 'неоплаченные продления: сигнал {signalPct}%; например, услуга {serviceName}' END,
+    description=CASE key
+        WHEN 'renewal_unsecured' THEN 'плавная срочность ручного продления'
+        WHEN 'insufficient_funds' THEN 'непокрытая доля платежа с учётом срочности; баланс распределяется по времени и id услуги'
+        WHEN 'prolong_wait' THEN 'плавная тяжесть задержки относительно срока продления'
+        WHEN 'suspended_share' THEN 'доля платежей приостановленных услуг'
+        WHEN 'termination_history' THEN 'доля удалённых услуг без заблокированных'
+        WHEN 'payment_failures' THEN 'максимальная тяжесть неоплаты продлений услуги; повторные попытки не суммируются' END;
+
+CREATE TABLE IF NOT EXISTS public.risk_observations (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    account_id bigint NOT NULL,
+    service_id bigint NOT NULL,
+    as_of timestamptz NOT NULL,
+    due_at timestamptz NOT NULL,
+    deadline timestamptz NOT NULL,
+    model_version bigint NOT NULL,
+    amount bigint NOT NULL,
+    heuristic_score numeric NOT NULL,
+    features jsonb NOT NULL,
+    provenance text NOT NULL CHECK(provenance IN ('real','synthetic','unverified')),
+    target text NOT NULL DEFAULT 'service_nonrenewal_v2',
+    UNIQUE(account_id,service_id,as_of,due_at,model_version)
+);
+
+CREATE TABLE IF NOT EXISTS public.risk_outcomes (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    account_id bigint NOT NULL,
+    service_id bigint NOT NULL,
+    due_at timestamptz NOT NULL,
+    event_at timestamptz NOT NULL,
+    observed_at timestamptz NOT NULL DEFAULT now(),
+    outcome text NOT NULL CHECK(outcome IN ('renewed','not_renewed','blocked')),
+    provenance text NOT NULL CHECK(provenance IN ('real','synthetic','unverified')),
+    target text NOT NULL DEFAULT 'service_nonrenewal_v2',
+    CHECK(event_at<=observed_at),
+    UNIQUE(account_id,service_id,due_at,event_at,outcome,provenance)
+);
+
+CREATE OR REPLACE FUNCTION public.capture_risk_observation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO public.risk_payment_assessments
+    SELECT NEW.id,r.service_id,r.account_id,r.due_at,r.payment_index,r.price,r.payment_term,r.risk_score,r.allocated,r.transactions_observed
+    FROM public.risk_payment_scores_vw r WHERE r.account_id=NEW.account_id AND r.payment_index=0;
+    INSERT INTO public.risk_observations(account_id,service_id,as_of,due_at,deadline,model_version,amount,heuristic_score,features,provenance)
+    SELECT r.account_id,r.service_id,NEW.as_of,r.due_at,r.due_at+r.grace*interval '24 hours',NEW.model_version,r.price,r.risk_score,
+        (SELECT jsonb_object_agg(k.key,r.feature_values[k.n]) FROM unnest(ARRAY['renewal_unsecured','insufficient_funds','prolong_wait','suspended_share','termination_history','payment_failures']) WITH ORDINALITY k(key,n)),
+        coalesce(nullif(current_setting('churn.data_provenance',true),''),'unverified')
+    FROM public.risk_payment_scores_vw r
+    WHERE r.account_id=NEW.account_id AND r.payment_index=0 AND r.due_at>NEW.as_of AND r.price>0
+    ON CONFLICT DO NOTHING;
+    RETURN NULL;
+END
+$$;
+
+DROP TRIGGER IF EXISTS risk_observation_capture ON public.scores;
+CREATE TRIGGER risk_observation_capture AFTER INSERT ON public.scores
+FOR EACH ROW WHEN (NEW.status='scored') EXECUTE FUNCTION public.capture_risk_observation();
+
+CREATE OR REPLACE FUNCTION public.export_risk_dataset() RETURNS jsonb LANGUAGE sql STABLE AS $$
+SELECT jsonb_build_object(
+    'observations',coalesce((SELECT jsonb_agg(to_jsonb(r)-'id') FROM public.risk_observations r),'[]'::jsonb),
+    'outcomes',coalesce((SELECT jsonb_agg(to_jsonb(r)-'id') FROM public.risk_outcomes r),'[]'::jsonb)
+)
+$$;
+
+CREATE OR REPLACE VIEW public.risk_target_definitions_vw AS
+SELECT 'service_nonrenewal_v2'::text AS target,
+    'платная услуга не продлена к ближайшему сроку плюс grace; блокировки исключены; отсутствие события не является отрицательным исходом'::text AS event_definition,
+    (SELECT value FROM public.model_settings WHERE key='horizon_days') AS horizon_days,
+    (SELECT value FROM public.model_settings WHERE key='grace_days') AS grace_days,
+    'снимок до срока; исход подтверждён источником; повторные снимки одного продления объединяются'::text AS observation_policy,
+    'уход клиента требует подтверждённых 30 дней без платных услуг; не выводится из единичного непродления'::text AS account_churn_definition;
+
+CREATE OR REPLACE VIEW public.risk_data_quality_vw AS
+SELECT sc.account_id,sc.as_of,
+    public.risk_projection_stale(sc.account_id,sc.model_version,sc.valid_until) AS is_stale,
+    count(DISTINCT r.service_id)::integer AS services_with_payments,
+    coalesce(min(r.transactions_observed),0)::integer AS minimum_transactions_per_service,
+    CASE WHEN count(r.service_id)=0 THEN 'no_upcoming_payments'
+        WHEN min(r.transactions_observed)<(SELECT value FROM model_settings WHERE key='min_transactions') THEN 'limited_history'
+        ELSE 'observed_history' END AS data_sufficiency,
+    false AS predictive_accuracy_validated
+FROM public.scores sc LEFT JOIN public.risk_payment_assessments r ON r.score_id=sc.id AND r.payment_index=0
+WHERE sc.is_current GROUP BY sc.account_id,sc.id;
+
+CREATE OR REPLACE FUNCTION public.capture_risk_outcome() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    v_now timestamptz := public.model_now();
+    v_provenance text := coalesce(nullif(current_setting('churn.data_provenance',true),''),'unverified');
+BEGIN
+    INSERT INTO public.risk_outcomes(account_id,service_id,due_at,event_at,observed_at,outcome,provenance)
+    SELECT DISTINCT o.account_id,o.service_id,o.due_at,v_now,v_now,
+        CASE WHEN NEW.status='blocked' THEN 'blocked'
+             WHEN NEW."expiresAt">o.due_at AND v_now<=o.deadline THEN 'renewed' ELSE 'not_renewed' END,
+        v_provenance
+    FROM public.risk_observations o
+    WHERE o.service_id=NEW.id AND o.account_id=NEW."ownerId" AND o.as_of<v_now
+      AND o.due_at=OLD."expiresAt" AND (
+        NEW.status='blocked'
+        OR (NEW."expiresAt">OLD."expiresAt" AND v_now<=o.deadline)
+        OR (v_now>=o.deadline AND NEW."expiresAt"=o.due_at AND NEW.status IN ('deleted','prolong_wait'))
+      )
+    ON CONFLICT DO NOTHING;
+    RETURN NULL;
+END
+$$;
+
+DROP TRIGGER IF EXISTS risk_outcome_capture ON public.services;
+CREATE TRIGGER risk_outcome_capture AFTER UPDATE OF status,"expiresAt" ON public.services
+FOR EACH ROW EXECUTE FUNCTION public.capture_risk_outcome();

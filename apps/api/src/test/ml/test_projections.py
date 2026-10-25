@@ -1,4 +1,5 @@
 import unittest
+import math
 
 from postgres_fixture import AS_OF, PostgresFixture
 
@@ -97,9 +98,11 @@ class ProjectionTest(PostgresFixture):
         self.transaction(102, hours=-0.25)
         before = self.score()
         self.assertEqual(before['features']['payment_failures'], 0)
-        self.assertEqual(before['valid_until'], '2026-10-19T16:15:00+00:00')
+        self.assertEqual(before['valid_until'], '2026-10-19T16:00:00+00:00')
         self.sql("UPDATE model_clock SET frozen_at=frozen_at+interval '75 minutes';")
-        self.assertEqual(self.score()['features']['payment_failures'], 0.5)
+        self.assertEqual(self.score()['features']['payment_failures'],0)
+        self.sql("UPDATE model_clock SET frozen_at=frozen_at+interval '1 hour';")
+        self.assertAlmostEqual(self.score()['features']['payment_failures'],1-math.exp(-1),places=4)
 
     def test_future_payment_is_not_counted_as_completed_evidence(self):
         self.account()
@@ -109,10 +112,12 @@ class ProjectionTest(PostgresFixture):
         self.transaction(103, status='performed')
         self.sql(f'''UPDATE transactions SET "performedAt"='{AS_OF}'::timestamptz+interval '1 hour' WHERE id=103;''')
         before = self.score()
-        self.assertEqual(before['features']['payment_failures'], 1)
+        self.assertAlmostEqual(before['features']['payment_failures'],1-math.exp(-1),places=4)
         self.assertEqual(before['valid_until'], '2026-10-19T16:00:00+00:00')
         self.sql("UPDATE model_clock SET frozen_at=frozen_at+interval '1 hour';")
-        self.assertEqual(self.score()['features']['payment_failures'], 0.6667)
+        self.assertAlmostEqual(self.score()['features']['payment_failures'],1-math.exp(-25/24),places=4)
+        self.sql("UPDATE transactions SET status='performed', \"performedAt\"=model_now();")
+        self.assertEqual(self.score()['features']['payment_failures'],0)
 
 
 if __name__ == '__main__':

@@ -1,3 +1,4 @@
+import math
 import subprocess
 import unittest
 
@@ -8,26 +9,26 @@ class RiskModelTest(PostgresFixture):
     def test_organizer_golden(self):
         self.fixture()
         rows = self.scores()
-        expected = [24.98, None, None, 23.33, 78.47, 19.18, None, None, 56.29, 55]
+        expected = [15.61, None, None, 26.99, 66.67, 10.66, None, None, 88.88, 66.64]
         self.assertEqual([r['risk_score'] for r in rows], expected)
         self.assertEqual([r['revenue_horizon'] for r in rows],
-                         [68904, None, None, 1281, 469136, 2416, None, None, 616532, 982])
+                         [68400, None, None, 1997, 1696, 2188, None, None, 1705, 1503])
         self.assertEqual([r['secured_amount'] for r in rows],
-                         [145, None, None, 1009, 0, 27, None, None, 91506, 0])
+                         [68400, None, None, 1997, 1696, 2188, None, None, 1705, 1503])
         self.assertEqual([r['expected_loss'] for r in rows],
-                         [17176, None, None, 63, 368131, 458, None, None, 295537, 540])
-        self.assertEqual(sum(r['expected_loss'] or 0 for r in rows), 681905)
+                         [10671, None, None, 539, 1131, 233, None, None, 1515, 1002])
+        self.assertEqual(sum(r['expected_loss'] or 0 for r in rows), 15091)
         self.assertEqual([r['risk_level'] for r in rows],
-                         ['low', None, None, 'low', 'high', 'low', None, None, 'high', 'high'])
-        self.assertEqual(sum(r['services_at_risk'] for r in rows), 11)
+                         ['low', None, None, 'medium', 'high', 'low', None, None, 'high', 'high'])
+        self.assertEqual(sum(r['services_at_risk'] for r in rows), 12)
 
     def test_relative_weight_sensitivity(self):
         self.fixture()
         self.sql("UPDATE model_settings SET value=40 WHERE key='weight_prolong_wait';")
         rows = self.scores()
         self.assertEqual([r['risk_score'] for r in rows],
-                         [22.71, None, None, 21.21, 80.43, 17.44, None, None, 51.17, 59.09])
-        self.assertEqual(sum(r['expected_loss'] or 0 for r in rows), 662652)
+                         [12.77, None, None, 22.08, 72.73, 8.72, None, None, 90.9, 72.7])
+        self.assertEqual(sum(r['expected_loss'] or 0 for r in rows), 13240)
 
     def test_repeatable_migration_preserves_settings(self):
         self.fixture()
@@ -81,7 +82,7 @@ class RiskModelTest(PostgresFixture):
         self.service()
         locked = self.score()
         self.assertEqual(locked['secured_amount'], 100)
-        self.assertEqual(locked['features']['insufficient_funds'], 0.9)
+        self.assertAlmostEqual(locked['features']['insufficient_funds'], 0.9*(math.exp(-0.1)-math.exp(-3))/(1-math.exp(-3)), places=4)
         self.sql("UPDATE accounts SET \"bonusState\"='unlocked' WHERE id=101;")
         unlocked = self.score()
         self.assertEqual(unlocked['features']['insufficient_funds'], 0)
@@ -121,10 +122,8 @@ class RiskModelTest(PostgresFixture):
         self.transaction(102, status='performed')
         self.transaction(103, service_id=102)
         row = self.score()
-        self.assertEqual(row['features']['payment_failures'], 0.5)
-        reason = next(r for r in row['reasons'] if r['key'] == 'payment_failures')
-        self.assertEqual(reason['params']['count'], 1)
-        self.assertEqual(reason['params']['total'], 2)
+        self.assertAlmostEqual(row['features']['payment_failures'], 1-math.exp(-1), places=4)
+        self.assertEqual(self.rows('SELECT transactions_observed FROM risk_payment_inputs_vw')[0]['transactions_observed'], 2)
 
     def test_payment_threshold_crossing_expires_score(self):
         self.account()
@@ -135,7 +134,9 @@ class RiskModelTest(PostgresFixture):
         self.assertEqual(row['features']['payment_failures'], 0)
         self.assertEqual(row['valid_until'], '2026-10-19T16:00:00+00:00')
         self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '1 hour';")
-        self.assertEqual(self.score()['features']['payment_failures'], 0.5)
+        self.assertEqual(self.score()['features']['payment_failures'], 0)
+        self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '1 hour';")
+        self.assertGreater(self.score()['features']['payment_failures'], 0)
 
     def test_payment_window_boundary_expires_score(self):
         self.account()
@@ -143,7 +144,7 @@ class RiskModelTest(PostgresFixture):
         self.transaction(101, hours=30 * 24 - 1)
         self.transaction(102, status='performed')
         row = self.score()
-        self.assertEqual(row['features']['payment_failures'], 0.5)
+        self.assertAlmostEqual(row['features']['payment_failures'], 1, places=4)
         self.assertEqual(row['valid_until'], '2026-10-19T16:00:00+00:00')
         self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '1 hour';")
         self.assertEqual(self.score()['features']['payment_failures'], 0)
@@ -155,7 +156,7 @@ class RiskModelTest(PostgresFixture):
         self.assertEqual(row['features']['insufficient_funds'], 0)
         self.assertEqual(row['risk_score'], 0)
         self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '1 second';")
-        self.assertEqual(self.score()['features']['insufficient_funds'], 1)
+        self.assertEqual(self.score()['revenue_horizon'], 1000)
 
     def test_suspended_revenue_and_payment_wait_semantics(self):
         self.account(balance=2000)
@@ -163,11 +164,12 @@ class RiskModelTest(PostgresFixture):
         suspended = self.score()
         self.assertGreater(suspended['revenue_horizon'], 0)
         self.assertEqual(suspended['features']['suspended_share'], 1)
-        self.assertEqual(suspended['expected_loss'], 0)
-        self.sql("UPDATE services SET status='prolong_wait' WHERE id=101;")
+        self.assertGreater(suspended['expected_loss'], 0)
+        self.assertEqual(suspended['secured_amount'],1000)
+        self.sql("UPDATE services SET status='prolong_wait', \"expiresAt\"=model_now()-interval '5 days' WHERE id=101;")
         waiting = self.score()
-        self.assertEqual(waiting['secured_amount'], 0)
-        self.assertEqual(waiting['features']['prolong_wait'], 1)
+        self.assertEqual(waiting['secured_amount'], 1000)
+        self.assertAlmostEqual(waiting['features']['prolong_wait'], 1-math.exp(-1), places=4)
         self.assertGreater(waiting['expected_loss'], 0)
 
     def test_model_metadata_never_claims_calibrated_probability(self):
@@ -217,9 +219,10 @@ class RiskModelTest(PostgresFixture):
         self.account()
         self.service()
         self.transaction(101)
-        self.assertEqual(self.score()['features']['payment_failures'], 0)
+        first=self.score()['features']['payment_failures']
+        self.assertAlmostEqual(first,1-math.exp(-1),places=4)
         self.transaction(102)
-        self.assertEqual(self.score()['features']['payment_failures'], 1)
+        self.assertEqual(self.score()['features']['payment_failures'], first)
         self.sql(f'''UPDATE transactions SET status='performed', "performedAt"='{AS_OF}';''')
         self.assertEqual(self.score()['features']['payment_failures'], 0)
 
@@ -274,9 +277,8 @@ class RiskModelTest(PostgresFixture):
         self.assertEqual(row['valid_until'], '2026-10-19T15:14:24.001+00:00')
         self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '14 minutes 25 seconds';")
         row = self.score()
-        self.assertGreater(row['features']['insufficient_funds'], 0)
-        reason = next(r for r in row['reasons'] if r['key'] == 'insufficient_funds')
-        self.assertEqual(reason['params']['requiredAmount'], 48100)
+        self.assertEqual(row['revenue_horizon'],48100)
+        self.assertEqual(row['secured_amount'],48000)
 
     def test_payment_exactly_on_horizon_boundary_expires_in_one_millisecond(self):
         self.account()
@@ -284,8 +286,8 @@ class RiskModelTest(PostgresFixture):
         self.assertEqual(self.score()['valid_until'], '2026-10-19T15:00:00.001+00:00')
         self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '1 millisecond';")
         row = self.score()
-        self.assertEqual(row['features']['insufficient_funds'], 1)
-        self.assertGreater(row['risk_score'], 0)
+        self.assertEqual(row['revenue_horizon'],1000)
+        self.assertLess(row['risk_score'],0.01)
 
     def test_payment_wait_is_overdue_at_grace_boundary(self):
         self.account()
@@ -293,32 +295,18 @@ class RiskModelTest(PostgresFixture):
         self.assertIn('overdue_prolong_wait', self.score()['anomalies'])
 
     def test_renewal_boundaries_for_all_payment_terms(self):
-        self.account()
-        self.service(price=100)
-        cases = [
-            ('hour', 30, '10.01', 48000),
-            ('week', 30, '9.01', 300),
-            ('month', 60, '29.5725', 100),
-            ('quarter_year', 120, '28.6975', 100),
-            ('half_year', 200, '17.385', 100),
-            ('year', 365, '365.01', 0),
-        ]
-        for term, horizon, days, balance in cases:
+        cases=[('hour','2026-02-01T01:00:00+00:00'),('week','2026-02-08T00:00:00+00:00'),
+               ('month','2026-03-01T00:00:00+00:00'),('quarter_year','2026-05-01T00:00:00+00:00'),
+               ('half_year','2026-08-01T00:00:00+00:00'),('year','2027-02-01T00:00:00+00:00')]
+        for term,following in cases:
             with self.subTest(term=term):
-                self.sql(f"UPDATE model_clock SET frozen_at='{AS_OF}';")
-                self.sql(f"UPDATE model_settings SET value={horizon} WHERE key='horizon_days';")
-                self.sql(f'UPDATE accounts SET balance={balance} WHERE id=101;')
-                self.sql(f'''UPDATE services SET "paymentTerm"='{term}',
-                    "expiresAt"='{AS_OF}'::timestamptz + {days} * interval '1 day'
-                    WHERE id=101;''')
-                row = self.score()
-                self.assertEqual(row['features']['insufficient_funds'], 0)
-                self.assertEqual(row['valid_until'], '2026-10-19T15:14:24.001+00:00')
-                self.sql("UPDATE model_clock SET frozen_at=frozen_at + interval '14 minutes 25 seconds';")
-                row = self.score()
-                reason = next(r for r in row['reasons'] if r['key'] == 'insufficient_funds')
-                self.assertEqual(reason['params']['requiredAmount'], balance + 100)
-                self.assertGreater(row['valid_until'], '2026-10-19T15:14:25+00:00')
+                rows=self.rows(f"SELECT * FROM risk_due_dates('2026-02-01','{term}','2026-02-02',365)")
+                self.assertEqual(len(rows),1)
+                rows=self.rows(f"SELECT * FROM risk_due_dates('2026-02-01','{term}','2026-02-01',365)")
+                if term=='year':
+                    self.assertEqual(len(rows),1)
+                else:
+                    self.assertEqual(rows[1]['due_at'],following)
 
 
 if __name__ == '__main__':
