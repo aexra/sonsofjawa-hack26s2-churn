@@ -26,6 +26,8 @@ services:
     env_file:
       - path: ../../.env
         required: false
+    environment:
+      ASSISTANT_MCP_URL: http://mcp:8090/mcp
     depends_on:
       pg:
         condition: service_healthy
