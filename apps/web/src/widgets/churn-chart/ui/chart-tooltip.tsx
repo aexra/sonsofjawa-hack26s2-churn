@@ -6,7 +6,11 @@ import type { TooltipContentProps } from 'recharts';
 
 const decimal = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
 
-export function ChartTooltip({ active, payload }: TooltipContentProps) {
+export function ChartTooltip({
+  active,
+  payload,
+  forecastLabel,
+}: TooltipContentProps & { forecastLabel?: string }) {
   const row = payload[0]?.payload as ChartRow | undefined;
   if (!active || !row) return null;
   const text = ru.overview.chart;
@@ -16,10 +20,10 @@ export function ChartTooltip({ active, payload }: TooltipContentProps) {
     lines.push([text.estimated, formatInt(row.deletionsEstimated)]);
   }
   if (row.expectedNonRenewals !== undefined) {
-    lines.push([text.forecast, decimal.format(row.expectedNonRenewals)]);
+    lines.push([forecastLabel ?? text.forecast, decimal.format(row.expectedNonRenewals)]);
   }
   if (row.expectedLossAmount !== undefined) {
-    lines.push([text.loss, formatMoney(row.expectedLossAmount)]);
+    lines.push(['сумма непродлений по платежам', formatMoney(row.expectedLossAmount)]);
   }
   if (row.servicesAtRisk !== undefined) lines.push([text.atRisk, formatInt(row.servicesAtRisk)]);
 

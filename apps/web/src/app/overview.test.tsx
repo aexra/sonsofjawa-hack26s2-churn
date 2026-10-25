@@ -144,7 +144,15 @@ const overviewHandlers = (
   options: { summary?: object; chart?: object; top?: object; mode?: string } = {},
 ) => [
   http.get('*/api/v1/analytics/summary', () => HttpResponse.json(options.summary ?? summary())),
-  http.get('*/api/v1/analytics/churn-chart', () => HttpResponse.json(options.chart ?? chart())),
+  http.get('*/api/v1/analytics/model-comparison', () =>
+    HttpResponse.json({
+      expert: options.chart ?? chart(),
+      ml: null,
+      mlState: 'not_requested',
+      payments: 3,
+      amountBasis: 'first_payment_face_value',
+    }),
+  ),
   http.get('*/api/v1/customers', () => HttpResponse.json(options.top ?? defaultTop())),
   http.get('*/api/v1/model/settings', () => HttpResponse.json(settings(options.mode))),
 ];
@@ -162,7 +170,11 @@ describe('overview page', () => {
     server.use(...signedInAs(admin), ...overviewHandlers());
     renderAt('/');
 
-    const kpi = await screen.findByRole('region', { name: 'сводка на горизонте 30 дн.' });
+    const kpi = await screen.findByRole(
+      'region',
+      { name: 'сводка на горизонте 30 дн.' },
+      { timeout: 5000 },
+    );
     expect(within(kpi).getByText('ожидаемые потери за 30 дн.')).toBeInTheDocument();
     expect(plain(within(kpi).getByText('6 819,05').textContent)).toBe('6 819,05€');
     expect(within(kpi).getByText('по 6 оценённым клиентам')).toBeInTheDocument();
@@ -274,7 +286,7 @@ describe('overview page', () => {
     expect(legend).toEqual([
       'удаления (факт)',
       'удаления (оценка по сроку)',
-      'ожидаемые непродления (прогноз)',
+      'экспертная оценка непродлений',
       'услуг под риском',
     ]);
     expect(within(section).getByText('сейчас')).toBeInTheDocument();
@@ -283,6 +295,64 @@ describe('overview page', () => {
         '90 дн. назад · 30 дн. вперёд · удаления до запуска оценены по сроку + 5 дн.',
       ),
     ).toBeInTheDocument();
+  });
+
+  it('recalculates ML and displays two independent forecasts on a common scale', async () => {
+    let predictions = 0;
+    const ml = {
+      ...chart(),
+      points: chart().points.map((point) =>
+        point.kind === 'forecast'
+          ? { ...point, expectedNonRenewals: 2, expectedLossAmount: 500 }
+          : point,
+      ),
+    };
+    server.use(
+      ...signedInAs(admin),
+      http.get('*/api/v1/analytics/model-comparison', ({ request }) => {
+        const learned = new URL(request.url).searchParams.get('includeMl') === 'true';
+        if (learned) predictions++;
+        return HttpResponse.json({
+          expert: chart(),
+          ml: learned ? ml : null,
+          mlState: learned ? 'ready' : 'not_requested',
+          payments: 3,
+          amountBasis: 'first_payment_face_value',
+          provenance: learned ? 'synthetic' : null,
+          modelId: '123456789abcdef',
+          training: learned
+            ? { state: 'ready', automaticRetraining: true, intervalSeconds: 3600 }
+            : null,
+        });
+      }),
+      ...overviewHandlers(),
+    );
+    renderAt('/');
+    await userEvent.click(await screen.findByRole('button', { name: 'модель ML' }));
+    expect(await screen.findByText(/обучена на синтетических исходах/)).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('figure[data-source="ml"]')).not.toBeNull());
+    expect(document.querySelector('figure[data-source="expert"]')).toBeNull();
+    const previous = predictions;
+    await userEvent.click(screen.getByRole('button', { name: 'сравнение' }));
+    await waitFor(() => expect(predictions).toBeGreaterThan(previous));
+    expect(document.querySelectorAll('figure[data-source]')).toHaveLength(2);
+    expect(screen.getByText(/общая шкала для двух моделей/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'экспертная' }));
+    expect(screen.getByRole('button', { name: 'экспертная' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(document.querySelector('figure[data-source="ml"]')).toBeNull();
+  });
+
+  it('keeps the expert chart when ML is unavailable and allows retry', async () => {
+    server.use(...signedInAs(admin), ...overviewHandlers());
+    renderAt('/');
+    await userEvent.click(await screen.findByRole('button', { name: 'сравнение' }));
+    expect(await screen.findByText('модель пока не готова или недоступна')).toBeInTheDocument();
+    expect(document.querySelector('figure[data-source="expert"]')).not.toBeNull();
+    expect(document.querySelector('figure[data-source="ml"]')).toBeNull();
+    expect(screen.getByRole('button', { name: 'повторить сейчас' })).toBeEnabled();
   });
 
   it('lists the top customers by expected loss and opens a customer', async () => {

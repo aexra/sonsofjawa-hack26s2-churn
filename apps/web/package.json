@@ -17,7 +17,7 @@
     "knip": "knip",
     "test": "vitest run",
     "check:text": "node scripts/check-ui-text.mjs",
-    "gen:api": "openapi-typescript ../../openapi.yaml -o src/shared/api/schema.d.ts",
+    "gen:api": "node scripts/generate-api.mjs",
     "api:drift": "node scripts/api-drift.mjs",
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm run knip && npm run check:text && npm run test && npm run build"
   },

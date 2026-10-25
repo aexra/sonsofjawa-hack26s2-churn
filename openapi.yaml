@@ -263,6 +263,24 @@ paths:
               schema: { $ref: '#/components/schemas/ChurnChart' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /api/v1/analytics/model-comparison:
+    get:
+      tags: [forecast-comparison]
+      operationId: getForecastComparison
+      summary: expert and ML forecasts for the same future first payments
+      parameters:
+        - { name: pastDays, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 90 } }
+        - { name: futureDays, in: query, schema: { type: integer, minimum: 1, maximum: 365 } }
+        - { name: includeMl, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: expert result is preserved when ML is unavailable; money uses payment face value
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ForecastComparison' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /api/v1/model/settings:
     get:
       tags: [model]
@@ -1366,6 +1384,41 @@ components:
               customers: { type: integer }
               contributionSum: { type: number }
         lastRecalc: { oneOf: [{ $ref: '#/components/schemas/RecalcRun' }, { type: 'null' }] }
+
+    ForecastComparison:
+      type: object
+      required: [expert, ml, mlState, payments, amountBasis]
+      properties:
+        expert: { $ref: '#/components/schemas/ChurnChart' }
+        ml:
+          oneOf:
+            - { $ref: '#/components/schemas/ChurnChart' }
+            - { type: 'null' }
+        mlState: { type: string, enum: [not_requested, unavailable, ready] }
+        modelId: { type: [string, 'null'] }
+        provenance: { type: [string, 'null'], enum: [real, synthetic, null] }
+        payments: { type: integer }
+        amountBasis: { type: string, enum: [first_payment_face_value] }
+        training:
+          oneOf:
+            - { $ref: '#/components/schemas/MlTrainingStatus' }
+            - { type: 'null' }
+
+    MlTrainingStatus:
+      type: object
+      required: [state, automaticRetraining, intervalSeconds]
+      properties:
+        state: { type: string }
+        automaticRetraining: { type: boolean }
+        intervalSeconds: { type: integer }
+        lastRunAt: { type: [string, 'null'], format: date-time }
+        nextRunAt: { type: [string, 'null'], format: date-time }
+        lastResult: { type: [string, 'null'] }
+        modelId: { type: [string, 'null'] }
+        provenance: { type: [string, 'null'] }
+        policyVersion: { type: [string, 'null'] }
+        availableFrom: { type: [string, 'null'], format: date-time }
+        demonstrationEnabled: { type: boolean }
 
     ChurnChart:
       type: object

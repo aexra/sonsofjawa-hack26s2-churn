@@ -51,6 +51,55 @@ class ContainerTest(unittest.TestCase):
         self.assertEqual(json.loads(read.stdout), {
             'model_id': self.demo['model_id'], 'usage': 'demonstration_only'})
 
+    def test_server_trains_and_predicts_over_http(self):
+        name = 'riskml-http-' + uuid.uuid4().hex
+        subprocess.run(['docker', 'run', '-d', '--name', name, '--network', 'none',
+                        '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
+                        '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m', '-e', 'ML_DEMO_ENABLED=true',
+                        '--mount', f'type=volume,source={self.volume},target=/app/ml/reports',
+                        self.image, 'serve'], check=True, capture_output=True)
+        script = """
+import json
+import time
+from urllib.request import Request, urlopen
+from riskml.contracts import FEATURES
+base = 'http://127.0.0.1:8091'
+def post(path, value):
+    with urlopen(Request(base + path, json.dumps(value).encode()), timeout=5) as response:
+        return json.load(response)
+for attempt in range(100):
+    try:
+        with urlopen(base + '/health', timeout=1) as response:
+            json.load(response)
+        break
+    except OSError:
+        time.sleep(0.1)
+post('/training-data', {'asOf': '2026-10-25T12:00:00Z', 'policyVersion': '2',
+                       'dataset': {'observations': [], 'outcomes': []}})
+for attempt in range(100):
+    with urlopen(base + '/status', timeout=2) as response:
+        status = json.load(response)
+    if status['modelId']:
+        break
+    time.sleep(0.2)
+row = {'account_id': 1, 'service_id': 1, 'as_of': '2026-10-25T12:00:00Z',
+       'due_at': '2026-10-30T12:00:00Z', 'deadline': '2026-11-04T12:00:00Z',
+       'amount': 1000, 'features': dict.fromkeys(FEATURES, 0.1),
+       'model_version': '2', 'heuristic_score': 20, 'provenance': 'unverified',
+       'target': 'service_nonrenewal_v2'}
+result = post('/predict', {'observations': [row]})
+assert result['usage'] == 'demonstration_only'
+assert 0 < result['predictions'][0]['probability_nonrenewal'] < 1
+print(json.dumps({'status': status['state'], 'count': len(result['predictions'])}))
+"""
+        try:
+            result = subprocess.run(['docker', 'exec', name, 'python', '-c', script],
+                                    capture_output=True, text=True, timeout=45)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {'status': 'ready', 'count': 1})
+        finally:
+            subprocess.run(['docker', 'rm', '-f', name], check=True, capture_output=True)
+
     def test_job_fails_on_missing_input_or_existing_output(self):
         missing = self.run_image('predict', '--model', '/app/ml/reports/missing.json',
                                 '--input', '/app/ml/reports/demo/requests.json',

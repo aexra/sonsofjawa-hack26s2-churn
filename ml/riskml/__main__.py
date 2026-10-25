@@ -80,10 +80,16 @@ def main():
     demo = commands.add_parser('demo')
     demo.add_argument('--out-dir', required=True)
     demo.add_argument('--seed', type=int, default=42)
+    commands.add_parser('serve')
     args = parser.parse_args()
     status = 0
     try:
-        if args.command == 'import':
+        if args.command == 'serve':
+            from .server import serve
+
+            serve()
+            return 0
+        elif args.command == 'import':
             result = {'inserted': import_records(args.store, read_json(args.input))}
         elif args.command == 'evaluate':
             result = compare(load_records(args.store), args.train_end, args.calibration_end, args.test_end,

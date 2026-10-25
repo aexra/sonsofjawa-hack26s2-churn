@@ -1,47 +1,43 @@
-import { useId, useMemo } from 'react';
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { useState } from 'react';
 
-import { useChurnChart } from '@/entities/analytics';
+import { useForecastComparison } from '@/entities/analytics';
 import { findSettingValue, useModelSettings } from '@/entities/model-settings';
 import { ru } from '@/shared/i18n/ru';
-import { formatDayMonth } from '@/shared/lib/format';
+import { formatMoney } from '@/shared/lib/format';
 import { BlockError } from '@/shared/ui/block-error';
+import { Button } from '@/shared/ui/button';
 import { Skeleton } from '@/shared/ui/skeleton';
 
-import { countFutureDays, countPastDays, toChartRows, todayDate } from '../model/chart-data';
+import { countFutureDays, countPastDays, toChartRows } from '../model/chart-data';
 
-import { ChartLegend } from './chart-legend';
-import { ChartTooltip } from './chart-tooltip';
-import { ForecastPattern } from './forecast-pattern';
-import { NowBadge } from './now-badge';
+import { ForecastPlot } from './forecast-plot';
+import './comparison.css';
 
-const COUNT_AXIS = 'count';
-const RISK_AXIS = 'risk';
-const AXIS_TICK = { fill: 'var(--ca-ink-faint)', fontSize: 11 };
+const MODES = ['expert', 'ml', 'compare'] as const;
+const LABELS = { expert: 'экспертная', ml: 'модель ML', compare: 'сравнение' };
+type Mode = (typeof MODES)[number];
 
 export function ChurnChart() {
-  const chart = useChurnChart();
+  const [mode, setMode] = useState<Mode>('expert');
+  const chart = useForecastComparison(mode !== 'expert');
   const settings = useModelSettings();
-  const patternId = `forecast-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  const rows = useMemo(() => toChartRows(chart.data?.points ?? []), [chart.data]);
-
-  if (chart.isError) {
-    return <BlockError onRetry={() => void chart.refetch()} />;
-  }
-
+  const data = chart.data;
   const text = ru.overview.chart;
   const graceDays = findSettingValue(settings.data, 'grace_days');
-  const now = todayDate(rows);
+  const rows = toChartRows(data?.expert.points ?? []);
+  const maximum = Math.max(
+    1,
+    ...[...(data?.expert.points ?? []), ...(data?.ml?.points ?? [])].map(
+      (point) =>
+        (point.deletions ?? 0) + (point.deletionsEstimated ?? 0) + (point.expectedNonRenewals ?? 0),
+    ),
+  );
+  const panels = mode === 'compare' ? (['expert', 'ml'] as const) : ([mode] as const);
+  const select = (next: Mode) => {
+    if (next === mode) return;
+    if (next !== 'expert' && mode !== 'expert') void chart.refetch();
+    setMode(next);
+  };
 
   return (
     <section
@@ -52,106 +48,119 @@ export function ChurnChart() {
         <h2 id="overview-chart" className="m-0 font-display text-heading">
           {text.title}
         </h2>
-        {chart.data && (
+        {data && (
           <span className="text-caption text-ink-muted">
             {text.range(countPastDays(rows), countFutureDays(rows))}
             {graceDays !== undefined && ` · ${text.grace(graceDays)}`}
           </span>
         )}
       </div>
-      {chart.data ? (
-        <figure aria-label={text.label} className="m-0 flex flex-col gap-3">
-          <div className="h-65 min-w-0">
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-              initialDimension={{ width: 1100, height: 260 }}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="forecast-switch" role="group" aria-label="источник прогноза">
+          <span
+            className="forecast-switch-indicator"
+            aria-hidden="true"
+            style={{ transform: `translateX(${String(MODES.indexOf(mode) * 100)}%)` }}
+          />
+          {MODES.map((item) => (
+            <button
+              key={item}
+              type="button"
+              aria-pressed={mode === item}
+              className="forecast-switch-button"
+              onClick={() => select(item)}
             >
-              <ComposedChart data={rows} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
-                <defs>
-                  <ForecastPattern id={patternId} />
-                </defs>
-                <CartesianGrid vertical={false} stroke="var(--ca-chart-grid)" />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={formatDayMonth}
-                  tick={AXIS_TICK}
-                  tickLine={false}
-                  axisLine={{ stroke: 'var(--ca-chart-grid)' }}
-                  minTickGap={36}
-                />
-                <YAxis
-                  yAxisId={COUNT_AXIS}
-                  allowDecimals={false}
-                  tick={AXIS_TICK}
-                  tickLine={false}
-                  axisLine={false}
-                  width={32}
-                />
-                <YAxis yAxisId={RISK_AXIS} orientation="right" hide domain={[0, 'auto']} />
-                <Tooltip
-                  content={(props) => <ChartTooltip {...props} />}
-                  cursor={{ fill: 'var(--ca-surface-sunken)', opacity: 0.6 }}
-                />
-                <Bar
-                  yAxisId={COUNT_AXIS}
-                  dataKey="deletions"
-                  name={text.facts}
-                  stackId="day"
-                  radius={[2, 2, 0, 0]}
-                  className="series-facts"
-                  fill="var(--ca-chart-fact)"
-                  isAnimationActive={false}
-                />
-                <Bar
-                  yAxisId={COUNT_AXIS}
-                  dataKey="deletionsEstimated"
-                  name={text.estimated}
-                  stackId="day"
-                  radius={[2, 2, 0, 0]}
-                  className="series-estimated"
-                  fill="var(--ca-chart-fact-estimated)"
-                  isAnimationActive={false}
-                />
-                <Bar
-                  yAxisId={COUNT_AXIS}
-                  dataKey="expectedNonRenewals"
-                  name={text.forecast}
-                  stackId="day"
-                  radius={[2, 2, 0, 0]}
-                  className="series-forecast"
-                  fill={`url(#${patternId})`}
-                  stroke="var(--ca-chart-forecast)"
-                  isAnimationActive={false}
-                />
-                <Line
-                  yAxisId={RISK_AXIS}
-                  dataKey="servicesAtRisk"
-                  name={text.atRisk}
-                  className="series-at-risk"
-                  type="monotone"
-                  stroke="var(--ca-risk-medium-fill)"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 3 }}
-                  isAnimationActive={false}
-                />
-                {now && (
-                  <ReferenceLine
-                    yAxisId={COUNT_AXIS}
-                    x={now}
-                    stroke="var(--ca-ink)"
-                    strokeDasharray="3 3"
-                    label={<NowBadge value={text.now} />}
+              {LABELS[item]}
+            </button>
+          ))}
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          loading={chart.isFetching}
+          onClick={() => void chart.refetch()}
+        >
+          {chart.isFetching ? 'считаем прогноз…' : 'пересчитать'}
+        </Button>
+      </div>
+      <p className="m-0 text-caption text-ink-muted">
+        ближайшее продление каждой услуги · только будущие платежи · суммы по графику оплаты
+        {mode === 'compare' && ' · общая шкала для двух моделей'}
+      </p>
+      {mode !== 'expert' && data?.provenance === 'synthetic' && (
+        <p className="m-0 text-caption text-warning">
+          демонстрационная ML-модель · обучена на синтетических исходах
+        </p>
+      )}
+      {chart.isError && <BlockError onRetry={() => void chart.refetch()} />}
+      {!data && !chart.isError && <Skeleton className="h-75" />}
+      {data && (
+        <div
+          className={
+            mode === 'compare' ? 'forecast-panels forecast-panels-pair' : 'forecast-panels'
+          }
+          aria-busy={chart.isFetching}
+        >
+          {panels.map((source) => {
+            const series = source === 'ml' ? data.ml : data.expert;
+            const title = source === 'ml' ? 'прогноз ML' : 'экспертная оценка';
+            const total = series?.points.reduce(
+              (sum, point) => sum + (point.expectedNonRenewals ?? 0),
+              0,
+            );
+            const amount = series?.points.reduce(
+              (sum, point) => sum + (point.expectedLossAmount ?? 0),
+              0,
+            );
+            return (
+              <div key={source} className="min-w-0" aria-label={title}>
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 text-caption">
+                  <h3 className="m-0 text-body-strong">{title}</h3>
+                  {total !== undefined && amount !== undefined && (
+                    <span className="font-mono text-ink-muted">
+                      {total.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} непродлений ·{' '}
+                      {formatMoney(amount)}
+                    </span>
+                  )}
+                </div>
+                {series ? (
+                  <ForecastPlot
+                    key={`${source}-${mode}`}
+                    chart={series}
+                    source={source}
+                    maximum={maximum}
+                    title={title}
                   />
+                ) : (
+                  <div className="flex h-65 flex-col items-center justify-center gap-3 text-center text-caption text-ink-muted">
+                    {chart.isFetching ? (
+                      <span>рассчитываем прогноз ML…</span>
+                    ) : (
+                      <>
+                        <p className="m-0">модель пока не готова или недоступна</p>
+                        <p className="m-0 max-w-80">
+                          экспертная оценка сохранена. повторим запрос автоматически через 10
+                          секунд.
+                        </p>
+                        <Button size="sm" onClick={() => void chart.refetch()}>
+                          повторить сейчас
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 )}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <ChartLegend patternId={patternId} />
-        </figure>
-      ) : (
-        <Skeleton className="h-75" />
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {mode !== 'expert' && data?.training && (
+        <p className="m-0 text-caption text-ink-muted" aria-live="polite">
+          {data.training.state === 'training'
+            ? 'переобучение идёт в фоне; показан расчёт действующей модели'
+            : `автопереобучение каждые ${String(Math.round(data.training.intervalSeconds / 60))} мин. при новых данных`}
+          {data.modelId && ` · версия ${data.modelId.slice(0, 8)}`}
+        </p>
       )}
     </section>
   );

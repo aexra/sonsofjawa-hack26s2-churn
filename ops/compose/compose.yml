@@ -26,7 +26,10 @@ services:
     env_file:
       - path: ../../.env
         required: false
+    networks: [default, ml-internal]
     environment:
+      ML_URL: http://ml-server:8091
+      ML_SYNC_INTERVAL: ${ML_SYNC_INTERVAL:-60000}
       ASSISTANT_MCP_URL: http://mcp:8090/mcp
     depends_on:
       pg:
@@ -107,6 +110,33 @@ services:
       - ../seeds:/seeds:ro
     entrypoint: ["sh", "/scripts/seed.sh"]
 
+  ml-server:
+    image: ${IMAGE_REGISTRY:-churn}/churn-ml:${IMAGE_TAG:-local}
+    build:
+      context: ../../ml
+      args:
+        BASE_REGISTRY: ${BASE_REGISTRY:-docker.io}
+        PIP_INDEX_URL: ${ML_PIP_INDEX_URL:-https://pypi.org/simple}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [ml-internal]
+    environment:
+      ML_DEMO_ENABLED: ${ML_DEMO_ENABLED:-true}
+      ML_RETRAIN_SECONDS: ${ML_RETRAIN_SECONDS:-3600}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    volumes:
+      - ml_data:/app/ml/reports
+    command: [serve]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
   ml: &ml
     image: ${IMAGE_REGISTRY:-churn}/churn-ml:${IMAGE_TAG:-local}
     build:
@@ -154,3 +184,7 @@ services:
 volumes:
   pgdata:
   ml_data:
+
+networks:
+  ml-internal:
+    internal: true

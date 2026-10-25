@@ -4,7 +4,7 @@ from .contracts import TARGET, instant, validate
 from .dataset import episode
 
 
-def predict_batch(model, observations):
+def predict_batch(model, observations, *, demonstration=False):
     if not isinstance(observations, list):
         raise ValueError('observations must be a JSON array')
     seen = set()
@@ -20,7 +20,7 @@ def predict_batch(model, observations):
             raise ValueError('prediction feature policy differs from model')
         if instant(row['as_of']) < instant(model.available_from):
             raise ValueError('prediction predates completed model evaluation')
-        if model.provenance == 'synthetic' and row['provenance'] != 'synthetic':
+        if model.provenance == 'synthetic' and row['provenance'] != 'synthetic' and not demonstration:
             raise ValueError('demonstration model cannot predict real or unverified records')
         result = model.predict(row['features'])
         probability = result['probability']

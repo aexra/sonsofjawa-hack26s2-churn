@@ -1,6 +1,8 @@
 name: churn
 
 networks:
+  ml-internal:
+    internal: true
   nginx:
     external: true
 
@@ -11,8 +13,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx
+      - ml-internal
     env_file:
       - .env
+    environment:
+      ML_URL: http://ml-server:8091
+      ML_SYNC_INTERVAL: ${ML_SYNC_INTERVAL:-60000}
     healthcheck:
       test:
         - CMD
@@ -66,6 +72,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  ml-server:
+    image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/ml:dev
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [ml-internal]
+    environment:
+      ML_DEMO_ENABLED: ${ML_DEMO_ENABLED:-true}
+      ML_RETRAIN_SECONDS: ${ML_RETRAIN_SECONDS:-3600}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    volumes:
+      - ml_data:/app/ml/reports
+    command: [serve]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
 
   ml: &ml
     image: ${NEXUS_PULL_REGISTRY:-registry.aexra.ru}/hack26s2/ml:dev

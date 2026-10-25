@@ -1,4 +1,4 @@
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, queryOptions, useQuery } from '@tanstack/react-query';
 
 import { apiClient, unwrap } from '@/shared/api/client';
 import { queryKeys } from '@/shared/api/query-keys';
@@ -17,12 +17,19 @@ export const analyticsSummaryQueryOptions = queryOptions({
   queryFn: () => unwrap(apiClient.GET('/api/v1/analytics/summary')),
 });
 
-export const churnChartQueryOptions = queryOptions({
-  queryKey: [...queryKeys.analytics, 'churn-chart', CHART_PARAMS],
-  queryFn: () =>
-    unwrap(apiClient.GET('/api/v1/analytics/churn-chart', { params: { query: CHART_PARAMS } })),
-});
-
 export const useAnalyticsSummary = () => useQuery(analyticsSummaryQueryOptions);
 
-export const useChurnChart = () => useQuery(churnChartQueryOptions);
+export const useForecastComparison = (includeMl: boolean) =>
+  useQuery({
+    queryKey: [...queryKeys.analytics, 'model-comparison', CHART_PARAMS, includeMl],
+    queryFn: ({ signal }) =>
+      unwrap(
+        apiClient.GET('/api/v1/analytics/model-comparison', {
+          params: { query: { ...CHART_PARAMS, includeMl } },
+          signal,
+        }),
+      ),
+    placeholderData: keepPreviousData,
+    refetchInterval: (query) =>
+      includeMl && query.state.data?.mlState !== 'ready' ? 10000 : false,
+  });
