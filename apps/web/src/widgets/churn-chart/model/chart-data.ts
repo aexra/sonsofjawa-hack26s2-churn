@@ -7,6 +7,8 @@ export interface ChartRow {
   deletionsEstimated?: number;
   expectedNonRenewals?: number;
   expectedLossAmount?: number;
+  overdueNonRenewals?: number;
+  overdueLossAmount?: number;
   servicesAtRisk?: number;
 }
 
@@ -20,6 +22,8 @@ export const toChartRows = (points: ChurnChartPoint[]): ChartRow[] =>
     deletionsEstimated: present(point.deletionsEstimated),
     expectedNonRenewals: present(point.expectedNonRenewals),
     expectedLossAmount: present(point.expectedLossAmount),
+    overdueNonRenewals: present(point.overdueNonRenewals),
+    overdueLossAmount: present(point.overdueLossAmount),
     servicesAtRisk: present(point.servicesAtRisk),
   }));
 

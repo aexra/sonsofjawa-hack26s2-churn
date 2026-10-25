@@ -67,11 +67,20 @@ const chart = () => ({
         kind: 'fact',
         deletions: null,
         deletionsEstimated: offset === -30 ? 1 : 0,
+        overdueNonRenewals: offset === -10 ? 1.2 : 0,
+        overdueLossAmount: offset === -10 ? 4200 : 0,
         servicesAtRisk: null,
       };
     }
     if (offset === 0) {
-      return { date, kind: 'today', expectedNonRenewals: 5.4, servicesAtRisk: 11 };
+      return {
+        date,
+        kind: 'today',
+        expectedNonRenewals: 5.4,
+        overdueNonRenewals: 0.8,
+        overdueLossAmount: 2100,
+        servicesAtRisk: 11,
+      };
     }
     return {
       date,
@@ -248,7 +257,9 @@ describe('overview page', () => {
     server.use(...signedInAs(admin), ...overviewHandlers());
     renderAt('/');
 
-    const section = await screen.findByRole('region', { name: 'отток услуг: факт и прогноз' });
+    const section = await screen.findByRole('region', {
+      name: 'отток услуг: факт, просрочка и прогноз',
+    });
     await waitFor(() => {
       expect(section.querySelector('.series-forecast .recharts-bar-rectangle')).not.toBeNull();
     });
@@ -264,9 +275,13 @@ describe('overview page', () => {
     const estimatedFill = section
       .querySelector('.series-estimated .recharts-bar-rectangle path')
       ?.getAttribute('fill');
+    const overdueFill = section
+      .querySelector('.series-overdue .recharts-bar-rectangle path')
+      ?.getAttribute('fill');
     expect(forecastFill).toMatch(/^url\(#forecast-/);
+    expect(overdueFill).toMatch(/^url\(#overdue-/);
     expect(estimatedFill).toBe('var(--ca-chart-fact-estimated)');
-    expect(section.querySelector('pattern')).not.toBeNull();
+    expect(section.querySelectorAll('pattern').length).toBeGreaterThanOrEqual(2);
 
     const legend = within(section)
       .getAllByRole('listitem')
@@ -274,6 +289,7 @@ describe('overview page', () => {
     expect(legend).toEqual([
       'удаления (факт)',
       'удаления (оценка по сроку)',
+      'просроченные непродления',
       'ожидаемые непродления (прогноз)',
       'услуг под риском',
     ]);

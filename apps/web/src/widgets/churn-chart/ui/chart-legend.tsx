@@ -1,8 +1,15 @@
 import { ru } from '@/shared/i18n/ru';
 
 import { ForecastPattern } from './forecast-pattern';
+import { OverduePattern } from './overdue-pattern';
 
-export function ChartLegend({ patternId }: { patternId: string }) {
+export function ChartLegend({
+  forecastPatternId,
+  overduePatternId,
+}: {
+  forecastPatternId: string;
+  overduePatternId: string;
+}) {
   const text = ru.overview.chart;
   return (
     <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-2 p-0 text-caption text-ink-muted">
@@ -21,9 +28,27 @@ export function ChartLegend({ patternId }: { patternId: string }) {
       <li className="inline-flex items-center gap-1.5">
         <svg aria-hidden="true" viewBox="0 0 14 10" className="h-2.5 w-3.5">
           <defs>
-            <ForecastPattern id={`${patternId}-legend`} />
+            <OverduePattern id={`${overduePatternId}-legend`} />
           </defs>
-          <rect width={14} height={10} rx={2} fill={`url(#${patternId}-legend)`} />
+          <rect width={14} height={10} rx={2} fill={`url(#${overduePatternId}-legend)`} />
+          <rect
+            x={0.5}
+            y={0.5}
+            width={13}
+            height={9}
+            rx={2}
+            fill="none"
+            stroke="var(--ca-chart-overdue)"
+          />
+        </svg>
+        {text.overdue}
+      </li>
+      <li className="inline-flex items-center gap-1.5">
+        <svg aria-hidden="true" viewBox="0 0 14 10" className="h-2.5 w-3.5">
+          <defs>
+            <ForecastPattern id={`${forecastPatternId}-legend`} />
+          </defs>
+          <rect width={14} height={10} rx={2} fill={`url(#${forecastPatternId}-legend)`} />
           <rect
             x={0.5}
             y={0.5}

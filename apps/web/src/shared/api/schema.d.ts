@@ -992,6 +992,13 @@ export interface components {
              * @description forecast revenue loss of the day
              */
             expectedLossAmount?: number | null;
+            /** @description sum of weights for missed grace deadlines (fact, today) */
+            overdueNonRenewals?: number | null;
+            /**
+             * Format: int64
+             * @description overdue revenue loss of the day
+             */
+            overdueLossAmount?: number | null;
         };
         ModelSetting: {
             key: string;

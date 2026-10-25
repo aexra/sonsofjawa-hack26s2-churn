@@ -28,7 +28,9 @@ public class ChurnChartService {
             Integer deletionsEstimated,
             Integer servicesAtRisk,
             BigDecimal expectedNonRenewals,
-            Long expectedLossAmount) {}
+            Long expectedLossAmount,
+            BigDecimal overdueNonRenewals,
+            Long overdueLossAmount) {}
 
     public record Chart(OffsetDateTime asOf, int horizonDays, List<Point> points) {}
 
@@ -36,7 +38,7 @@ public class ChurnChartService {
 
     private record AtRisk(LocalDate day, int services) {}
 
-    private record Forecast(LocalDate day, BigDecimal nonRenewals, long lossAmount) {}
+    private record DayWeight(LocalDate day, BigDecimal nonRenewals, long lossAmount) {}
 
     private final JdbcClient jdbc;
 
@@ -58,17 +60,28 @@ public class ChurnChartService {
 
         Map<LocalDate, Deletions> deletions = byDay(deletions(first, today), Deletions::day);
         Map<LocalDate, AtRisk> atRisk = byDay(servicesAtRisk(first, today), AtRisk::day);
-        Map<LocalDate, Forecast> forecast = byDay(forecast(today, last, horizonDays), Forecast::day);
+        Map<LocalDate, DayWeight> forecast = byDay(forecast(today, last, horizonDays), DayWeight::day);
+        Map<LocalDate, DayWeight> overdue = byDay(overdue(first, today, horizonDays), DayWeight::day);
 
         List<Point> points = new ArrayList<>(pastDays + ahead + 1);
         for (LocalDate day = first; !day.isAfter(last); day = day.plusDays(1)) {
             Deletions removed = deletions.getOrDefault(day, new Deletions(day, 0, 0));
-            Forecast expected = forecast.getOrDefault(day, new Forecast(day, BigDecimal.ZERO, 0));
+            DayWeight expected = forecast.getOrDefault(day, new DayWeight(day, BigDecimal.ZERO, 0));
+            DayWeight missed = overdue.getOrDefault(day, new DayWeight(day, BigDecimal.ZERO, 0));
             Integer services = atRisk.containsKey(day) ? atRisk.get(day).services() : null;
             points.add(
                     switch (Integer.signum(day.compareTo(today))) {
                         case -1 ->
-                            new Point(day, Kind.FACT, removed.observed(), removed.estimated(), services, null, null);
+                            new Point(
+                                    day,
+                                    Kind.FACT,
+                                    removed.observed(),
+                                    removed.estimated(),
+                                    services,
+                                    null,
+                                    null,
+                                    missed.nonRenewals(),
+                                    missed.lossAmount());
                         case 0 ->
                             new Point(
                                     day,
@@ -77,7 +90,9 @@ public class ChurnChartService {
                                     removed.estimated(),
                                     services,
                                     expected.nonRenewals(),
-                                    expected.lossAmount());
+                                    expected.lossAmount(),
+                                    missed.nonRenewals(),
+                                    missed.lossAmount());
                         default ->
                             new Point(
                                     day,
@@ -86,7 +101,9 @@ public class ChurnChartService {
                                     null,
                                     null,
                                     expected.nonRenewals(),
-                                    expected.lossAmount());
+                                    expected.lossAmount(),
+                                    null,
+                                    null);
                     });
         }
         return new Chart(asOf, horizonDays, points);
@@ -126,19 +143,34 @@ public class ChurnChartService {
                 .list();
     }
 
-    private List<Forecast> forecast(LocalDate today, LocalDate last, int horizonDays) {
-        return jdbc.sql("""
-                        SELECT (expected_at AT TIME ZONE 'UTC')::date AS day,
-                               sum(risk_weight) AS non_renewals,
-                               round(sum(risk_weight * price * :horizon / public.term_days(payment_term)))::bigint AS loss
-                        FROM public.churn_forecast_vw
-                        WHERE (expected_at AT TIME ZONE 'UTC')::date BETWEEN :today AND :last
-                        GROUP BY 1
-                        """)
+    private List<DayWeight> forecast(LocalDate today, LocalDate last, int horizonDays) {
+        return weights("""
+                SELECT (expected_at AT TIME ZONE 'UTC')::date AS day,
+                       sum(risk_weight) AS non_renewals,
+                       round(sum(risk_weight * price * :horizon / public.term_days(payment_term)))::bigint AS loss
+                FROM public.churn_forecast_vw
+                WHERE (expected_at AT TIME ZONE 'UTC')::date BETWEEN :from AND :to
+                GROUP BY 1
+                """, today, last, horizonDays);
+    }
+
+    private List<DayWeight> overdue(LocalDate first, LocalDate today, int horizonDays) {
+        return weights("""
+                SELECT (deadline AT TIME ZONE 'UTC')::date AS day,
+                       sum(risk_weight) AS non_renewals,
+                       round(sum(risk_weight * price * :horizon / public.term_days(payment_term)))::bigint AS loss
+                FROM public.churn_overdue_vw
+                WHERE (deadline AT TIME ZONE 'UTC')::date BETWEEN :from AND :to
+                GROUP BY 1
+                """, first, today, horizonDays);
+    }
+
+    private List<DayWeight> weights(String sql, LocalDate from, LocalDate to, int horizonDays) {
+        return jdbc.sql(sql)
                 .param("horizon", horizonDays)
-                .param("today", today)
-                .param("last", last)
-                .query((rs, row) -> new Forecast(
+                .param("from", from)
+                .param("to", to)
+                .query((rs, row) -> new DayWeight(
                         rs.getObject("day", LocalDate.class), rs.getBigDecimal("non_renewals"), rs.getLong("loss")))
                 .list();
     }

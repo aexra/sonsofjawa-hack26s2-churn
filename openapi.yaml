@@ -1388,6 +1388,8 @@ components:
         servicesAtRisk: { type: [integer, 'null'], description: 'last snapshot of the day (fact, today)' }
         expectedNonRenewals: { type: [number, 'null'], description: 'sum of probabilities (forecast, today)' }
         expectedLossAmount: { type: [integer, 'null'], format: int64, x-unit: eurocent, description: 'forecast revenue loss of the day' }
+        overdueNonRenewals: { type: [number, 'null'], description: 'sum of weights for missed grace deadlines (fact, today)' }
+        overdueLossAmount: { type: [integer, 'null'], format: int64, x-unit: eurocent, description: 'overdue revenue loss of the day' }
 
     ModelSetting:
       type: object

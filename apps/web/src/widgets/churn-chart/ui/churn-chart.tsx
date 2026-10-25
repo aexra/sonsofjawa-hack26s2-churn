@@ -24,6 +24,7 @@ import { ChartLegend } from './chart-legend';
 import { ChartTooltip } from './chart-tooltip';
 import { ForecastPattern } from './forecast-pattern';
 import { NowBadge } from './now-badge';
+import { OverduePattern } from './overdue-pattern';
 
 const COUNT_AXIS = 'count';
 const RISK_AXIS = 'risk';
@@ -32,7 +33,9 @@ const AXIS_TICK = { fill: 'var(--ca-ink-faint)', fontSize: 11 };
 export function ChurnChart() {
   const chart = useChurnChart();
   const settings = useModelSettings();
-  const patternId = `forecast-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const idSuffix = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const forecastPatternId = `forecast-${idSuffix}`;
+  const overduePatternId = `overdue-${idSuffix}`;
   const rows = useMemo(() => toChartRows(chart.data?.points ?? []), [chart.data]);
 
   if (chart.isError) {
@@ -69,7 +72,8 @@ export function ChurnChart() {
             >
               <ComposedChart data={rows} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
                 <defs>
-                  <ForecastPattern id={patternId} />
+                  <ForecastPattern id={forecastPatternId} />
+                  <OverduePattern id={overduePatternId} />
                 </defs>
                 <CartesianGrid vertical={false} stroke="var(--ca-chart-grid)" />
                 <XAxis
@@ -115,12 +119,23 @@ export function ChurnChart() {
                 />
                 <Bar
                   yAxisId={COUNT_AXIS}
+                  dataKey="overdueNonRenewals"
+                  name={text.overdue}
+                  stackId="day"
+                  radius={[2, 2, 0, 0]}
+                  className="series-overdue"
+                  fill={`url(#${overduePatternId})`}
+                  stroke="var(--ca-chart-overdue)"
+                  isAnimationActive={false}
+                />
+                <Bar
+                  yAxisId={COUNT_AXIS}
                   dataKey="expectedNonRenewals"
                   name={text.forecast}
                   stackId="day"
                   radius={[2, 2, 0, 0]}
                   className="series-forecast"
-                  fill={`url(#${patternId})`}
+                  fill={`url(#${forecastPatternId})`}
                   stroke="var(--ca-chart-forecast)"
                   isAnimationActive={false}
                 />
@@ -148,7 +163,7 @@ export function ChurnChart() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <ChartLegend patternId={patternId} />
+          <ChartLegend forecastPatternId={forecastPatternId} overduePatternId={overduePatternId} />
         </figure>
       ) : (
         <Skeleton className="h-75" />
