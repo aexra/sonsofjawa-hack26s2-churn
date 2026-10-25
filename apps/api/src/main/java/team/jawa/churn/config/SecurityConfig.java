@@ -8,8 +8,10 @@ import java.io.IOException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
@@ -28,6 +30,8 @@ import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 import team.jawa.churn.auth.ApiKeyAuthenticationFilter;
@@ -45,6 +49,7 @@ import team.jawa.churn.web.ProblemWriter;
 class SecurityConfig {
 
     private static final String OIDC_AUTHORIZE_PATH = "/api/v1/auth/oidc/authorize";
+    private static final String DOCS_LOGIN_REDIRECT = "/login?next=%2Fapi%2Fv1%2Fdocs";
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -67,6 +72,15 @@ class SecurityConfig {
         csrfRepository.setCookieCustomizer(cookie -> cookie.sameSite("Strict").secure(auth.cookieSecure()));
         RequestMatcher hasAuthorizationHeader = request -> request.getHeader("Authorization") != null;
         PathPatternRequestMatcher.Builder paths = PathPatternRequestMatcher.withDefaults();
+        RequestMatcher docsPage = new OrRequestMatcher(
+                paths.matcher(HttpMethod.GET, "/api/v1/docs"),
+                paths.matcher(HttpMethod.GET, "/api/v1/docs/"),
+                paths.matcher(HttpMethod.GET, "/api/v1/swagger-ui/index.html"));
+        RequestMatcher acceptsHtml = request -> {
+            String accept = request.getHeader("Accept");
+            return accept != null && accept.contains(MediaType.TEXT_HTML_VALUE);
+        };
+        RequestMatcher browserOpensDocs = new AndRequestMatcher(docsPage, acceptsHtml);
 
         http.csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
@@ -113,8 +127,18 @@ class SecurityConfig {
                         .hasRole("ADMIN")
                         .anyRequest()
                         .denyAll())
-                .exceptionHandling(e -> e.authenticationEntryPoint((request, response, exception) -> problems.write(
-                                response, HttpStatus.UNAUTHORIZED, "unauthenticated", "authentication required"))
+                .exceptionHandling(e -> e.authenticationEntryPoint((request, response, exception) -> {
+                            if (browserOpensDocs.matches(request)) {
+                                response.setStatus(HttpStatus.FOUND.value());
+                                response.setHeader(HttpHeaders.LOCATION, DOCS_LOGIN_REDIRECT);
+                            } else {
+                                problems.write(
+                                        response,
+                                        HttpStatus.UNAUTHORIZED,
+                                        "unauthenticated",
+                                        "authentication required");
+                            }
+                        })
                         .accessDeniedHandler((request, response, exception) -> {
                             if (exception instanceof CsrfException) {
                                 problems.write(response, HttpStatus.FORBIDDEN, "csrf_invalid", "invalid csrf token");

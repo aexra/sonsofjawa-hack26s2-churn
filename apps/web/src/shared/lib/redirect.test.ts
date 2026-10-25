@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { safeNextPath } from './redirect';
+import { isServerPath, safeNextPath } from './redirect';
 
 describe('safeNextPath', () => {
   it('keeps local paths', () => {
@@ -13,4 +13,14 @@ describe('safeNextPath', () => {
       expect(safeNextPath(value)).toBe('/');
     },
   );
+});
+
+describe('isServerPath', () => {
+  it('detects pages served by the api', () => {
+    expect(isServerPath('/api/v1/docs')).toBe(true);
+  });
+
+  it('keeps app routes inside the router', () => {
+    expect(isServerPath('/customers')).toBe(false);
+  });
 });

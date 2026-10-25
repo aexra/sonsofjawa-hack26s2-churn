@@ -6,7 +6,7 @@ import { useSession } from '@/entities/session';
 import { LoginForm, SsoButton, useAuthProviders } from '@/features/auth-login';
 import { runtimeConfig } from '@/shared/config/runtime';
 import { ru } from '@/shared/i18n/ru';
-import { safeNextPath } from '@/shared/lib/redirect';
+import { isServerPath, safeNextPath } from '@/shared/lib/redirect';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
@@ -42,6 +42,13 @@ function Notice({
   );
 }
 
+function ServerRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+  return null;
+}
+
 export function LoginPage() {
   const [params] = useSearchParams();
   const { user } = useSession();
@@ -55,7 +62,8 @@ export function LoginPage() {
     document.title = `${ru.pages.login} · ${ru.app.title}`;
   }, []);
 
-  if (user) return <Navigate to={next} replace />;
+  if (user)
+    return isServerPath(next) ? <ServerRedirect to={next} /> : <Navigate to={next} replace />;
 
   const oidc = providers.data?.oidc;
   const sso =

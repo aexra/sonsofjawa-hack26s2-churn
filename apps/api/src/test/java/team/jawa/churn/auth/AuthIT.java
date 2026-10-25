@@ -2,6 +2,9 @@ package team.jawa.churn.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -164,6 +167,23 @@ class AuthIT extends IntegrationTest {
         assertThat(client().get("/api/v1/docs").statusCode()).isEqualTo(401);
         assertThat(client().get("/api/v1/openapi.yaml").statusCode()).isEqualTo(401);
         assertThat(client().get("/v3/api-docs").statusCode()).isEqualTo(401);
+    }
+
+    @Test
+    void browserOpeningSwaggerWithoutLoginIsSentToLogin() throws Exception {
+        HttpResponse<String> response = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build()
+                .send(
+                        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/docs"))
+                                .header("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+                                .GET()
+                                .build(),
+                        HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isEqualTo(302);
+        assertThat(response.headers().firstValue("Location")).contains("/login?next=%2Fapi%2Fv1%2Fdocs");
+        assertThat(response.body()).isEmpty();
     }
 
     @Test
