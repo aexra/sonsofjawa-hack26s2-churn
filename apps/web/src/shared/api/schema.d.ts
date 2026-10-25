@@ -399,6 +399,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assistant/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * ask the assistant; the answer is streamed as server-sent events
+         * @description Only browser sessions (cookie + X-XSRF-TOKEN); bot api keys and delegated tokens are rejected.
+         *     The server keeps no history: the browser sends the dialog each time.
+         *     Tools are called through the mcp service with a delegated token of the current user,
+         *     or with mcpKey when it is given.
+         *     Events: step (tool call), text (answer chunk), done, error; data of each event is AssistantEvent.
+         */
+        post: operations["askAssistant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -514,7 +538,7 @@ export interface components {
             title: string;
             status: number;
             /** @enum {string} */
-            code: "unauthenticated" | "forbidden" | "local_auth_disabled" | "invalid_credentials" | "account_disabled" | "refresh_invalid" | "csrf_invalid" | "not_found" | "invalid_field" | "invalid_sort" | "invalid_filter" | "validation_failed" | "payload_too_large" | "unsupported_media_type" | "conflict" | "last_admin" | "internal";
+            code: "unauthenticated" | "forbidden" | "local_auth_disabled" | "invalid_credentials" | "account_disabled" | "refresh_invalid" | "csrf_invalid" | "not_found" | "invalid_field" | "invalid_sort" | "invalid_filter" | "validation_failed" | "payload_too_large" | "unsupported_media_type" | "conflict" | "last_admin" | "rate_limited" | "assistant_disabled" | "internal";
             detail?: string;
             requestId?: string;
             errors?: components["schemas"]["FieldError"][];
@@ -563,6 +587,8 @@ export interface components {
             role?: components["schemas"]["Role"];
             authProvider: components["schemas"]["AuthProvider"];
             scopes?: components["schemas"]["ApiKeyScope"][];
+            /** @description the assistant is configured and available to this principal */
+            assistantEnabled?: boolean;
         };
         /** @enum {string} */
         RiskLevel: "high" | "medium" | "low";
@@ -1095,6 +1121,48 @@ export interface components {
             mode?: string;
             rowsApplied?: number;
         };
+        AssistantRequest: {
+            /** @description dialog from the browser, oldest first; the last message has role user */
+            messages: components["schemas"]["AssistantMessage"][];
+            page?: components["schemas"]["AssistantPage"];
+            /** @description bot api key to call the mcp tools with instead of the delegated token of the user */
+            mcpKey?: string;
+        };
+        AssistantMessage: {
+            /** @enum {string} */
+            role: "user" | "assistant";
+            content: string;
+        };
+        /** @description where the chat is open */
+        AssistantPage: {
+            route?: string;
+            /** Format: int64 */
+            customerId?: number;
+        };
+        AssistantEvent: {
+            /** @enum {string} */
+            type: "step" | "text" | "done" | "error";
+            /** @description step: call id */
+            id?: string;
+            /** @description step: mcp tool name */
+            tool?: string;
+            /**
+             * @description step
+             * @enum {string}
+             */
+            status?: "started" | "done" | "failed";
+            /** @description step: short result, e.g. row count */
+            summary?: string;
+            /** @description text: next chunk of the answer */
+            delta?: string;
+            /** @description done: number of tool calls */
+            steps?: number;
+            /**
+             * @description error
+             * @enum {string}
+             */
+            code?: "assistant_unavailable" | "assistant_timeout" | "assistant_key_invalid" | "assistant_key_forbidden" | "assistant_step_limit";
+        };
         User: {
             /** Format: int64 */
             id: number;
@@ -1222,6 +1290,24 @@ export interface components {
         };
         /** @description validation_failed with row/field errors */
         Unprocessable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description rate_limited */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description assistant_disabled - no model is configured */
+        AssistantDisabled: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1967,6 +2053,36 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    askAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantRequest"];
+            };
+        };
+        responses: {
+            /** @description event stream; event name equals AssistantEvent.type */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["AssistantEvent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["AssistantDisabled"];
         };
     };
     listUsers: {

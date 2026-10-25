@@ -86,6 +86,42 @@ export const createApiClient = (apiBaseUrl: string) => {
 
 export const apiClient = createApiClient(runtimeConfig.apiBaseUrl);
 
+type StreamPath = keyof paths & `${typeof API_PREFIX}/${string}`;
+
+export const postEventStream = async (
+  path: StreamPath,
+  body: unknown,
+  signal: AbortSignal,
+): Promise<Response> => {
+  const origin = serverOrigin(runtimeConfig.apiBaseUrl);
+  const send = () => {
+    const request = new Request(`${origin}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify(body),
+      signal,
+    });
+    applyCsrf(request);
+    return globalThis.fetch(request);
+  };
+  const response = await send();
+  if (response.status !== 401) return response;
+  if (await refreshSession(origin)) return send();
+  sessionExpiredHandler?.();
+  return response;
+};
+
+export const problemOf = async (response: Response): Promise<ApiError> => {
+  let problem: Partial<components['schemas']['Problem']> | undefined;
+  try {
+    problem = (await response.json()) as Partial<components['schemas']['Problem']>;
+  } catch {
+    problem = undefined;
+  }
+  return new ApiError(response.status, problem);
+};
+
 interface Settled {
   data?: unknown;
   error?: unknown;
