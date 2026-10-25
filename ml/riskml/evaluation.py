@@ -3,7 +3,7 @@ import platform
 from collections import Counter
 
 from .contracts import FEATURES, TARGET
-from .dataset import canonical, labeled, temporal_split
+from .dataset import canonical, prepare_periods
 
 
 def metrics(labels, scores, amounts, probabilities):
@@ -51,10 +51,11 @@ def compare(payload, train_end, calibration_end, test_end, min_rows=30, min_clas
     if model_version is not None:
         payload = dict(payload, observations=[r for r in payload.get('observations', [])
                                               if str(r['model_version']) == str(model_version)])
-    rows, excluded = labeled(payload, test_end)
-    parts = temporal_split(rows, train_end, calibration_end, test_end)
+    parts, excluded_by_cutoff, available = prepare_periods(payload, train_end, calibration_end, test_end)
+    rows = [row for group in parts.values() for row in group]
     report = {'target': TARGET, 'status': 'insufficient_observed_outcomes',
-              'excluded': excluded, 'embargoed_or_outside_windows': len(rows)-sum(map(len, parts.values())),
+              'excluded': excluded_by_cutoff['test'], 'excluded_by_cutoff': excluded_by_cutoff,
+              'labeled_episodes_by_cutoff': available,
               'split_counts': {k: len(v) for k, v in parts.items()},
               'split_boundaries': {'train_end': train_end, 'calibration_end': calibration_end, 'test_end': test_end},
               'dataset_sha256': hashlib.sha256(canonical(payload).encode()).hexdigest(),
