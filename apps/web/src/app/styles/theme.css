@@ -26,6 +26,7 @@
   --ca-chart-fact: #3a3d44;
   --ca-chart-fact-estimated: #9a9da4;
   --ca-chart-forecast: #1497c8;
+  --ca-chart-overdue: #d86a22;
   --ca-chart-grid: #e6e6e6;
   --ca-scrim: #00000066;
   --ca-tile: #000000;
@@ -68,6 +69,7 @@
     --ca-chart-fact: #c8cbd1;
     --ca-chart-fact-estimated: #6a6e77;
     --ca-chart-forecast: #4cc6f1;
+    --ca-chart-overdue: #e97c35;
     --ca-chart-grid: #232427;
     --ca-scrim: #000000b3;
     --ca-tile: #000000;
@@ -110,6 +112,7 @@
   --ca-chart-fact: #c8cbd1;
   --ca-chart-fact-estimated: #6a6e77;
   --ca-chart-forecast: #4cc6f1;
+  --ca-chart-overdue: #e97c35;
   --ca-chart-grid: #232427;
   --ca-scrim: #000000b3;
   --ca-tile: #000000;
@@ -150,6 +153,7 @@
   --color-chart-fact: var(--ca-chart-fact);
   --color-chart-fact-estimated: var(--ca-chart-fact-estimated);
   --color-chart-forecast: var(--ca-chart-forecast);
+  --color-chart-overdue: var(--ca-chart-overdue);
   --color-chart-grid: var(--ca-chart-grid);
   --color-scrim: var(--ca-scrim);
   --color-tile: var(--ca-tile);

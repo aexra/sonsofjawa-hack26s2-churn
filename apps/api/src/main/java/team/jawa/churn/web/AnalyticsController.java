@@ -82,6 +82,8 @@ class AnalyticsController implements AnalyticsApi {
                 .deletionsEstimated(point.deletionsEstimated())
                 .servicesAtRisk(point.servicesAtRisk())
                 .expectedNonRenewals(point.expectedNonRenewals())
-                .expectedLossAmount(point.expectedLossAmount());
+                .expectedLossAmount(point.expectedLossAmount())
+                .overdueNonRenewals(point.overdueNonRenewals())
+                .overdueLossAmount(point.overdueLossAmount());
     }
 }

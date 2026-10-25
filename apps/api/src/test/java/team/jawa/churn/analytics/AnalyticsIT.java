@@ -258,7 +258,13 @@ class AnalyticsIT extends IntegrationTest {
             if (point.get("kind").asString().equals("fact")) {
                 assertThat(point.get("expectedNonRenewals").isNull()).isTrue();
                 assertThat(point.get("expectedLossAmount").isNull()).isTrue();
+                assertThat(point.get("overdueNonRenewals").isNull()).isFalse();
+                assertThat(point.get("overdueLossAmount").isNull()).isFalse();
                 continue;
+            }
+            if (point.get("kind").asString().equals("forecast")) {
+                assertThat(point.get("overdueNonRenewals").isNull()).isTrue();
+                assertThat(point.get("overdueLossAmount").isNull()).isTrue();
             }
             nonRenewals = nonRenewals.add(point.get("expectedNonRenewals").decimalValue());
             loss += point.get("expectedLossAmount").asLong();
@@ -274,6 +280,41 @@ class AnalyticsIT extends IntegrationTest {
         long expectedLoss = jdbc.queryForObject(
                 "select round(sum(risk_weight * price * 30 / term_days(payment_term))) from churn_forecast_vw",
                 Long.class);
+        assertThat(loss).isBetween(expectedLoss - 11, expectedLoss + 11);
+    }
+
+    @Test
+    void theChartOverdueMatchesTheOverdueView() throws Exception {
+        loadAndRecalculate();
+
+        JsonNode points = read(analyst(), "/api/v1/analytics/churn-chart").get("points");
+
+        BigDecimal overdue = BigDecimal.ZERO;
+        long loss = 0;
+        for (JsonNode point : points) {
+            if (point.get("kind").asString().equals("forecast")) {
+                continue;
+            }
+            overdue = overdue.add(point.get("overdueNonRenewals").decimalValue());
+            loss += point.get("overdueLossAmount").asLong();
+        }
+        BigDecimal fromView = jdbc.queryForObject(
+                "select coalesce(sum(risk_weight), 0) from churn_overdue_vw"
+                        + " where (deadline at time zone 'UTC')::date"
+                        + " between ?::date - 90 and ?::date",
+                BigDecimal.class,
+                TODAY,
+                TODAY);
+        assertThat(overdue).isEqualByComparingTo(fromView);
+        assertThat(fromView).isGreaterThan(BigDecimal.ZERO);
+        long expectedLoss = jdbc.queryForObject(
+                "select coalesce(round(sum(risk_weight * price * 30 / term_days(payment_term))), 0)"
+                        + " from churn_overdue_vw"
+                        + " where (deadline at time zone 'UTC')::date"
+                        + " between ?::date - 90 and ?::date",
+                Long.class,
+                TODAY,
+                TODAY);
         assertThat(loss).isBetween(expectedLoss - 11, expectedLoss + 11);
     }
 

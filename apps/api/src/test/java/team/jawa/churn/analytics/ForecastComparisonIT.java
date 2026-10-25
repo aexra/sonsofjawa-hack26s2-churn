@@ -100,7 +100,8 @@ class ForecastComparisonIT extends IntegrationTest {
                     "training",
                     Map.of("state", "ready")));
         });
-        var response = analyst().get("/api/v1/analytics/model-comparison?includeMl=true");
+        var client = analyst();
+        var response = client.get("/api/v1/analytics/model-comparison?includeMl=true");
         assertThat(response.statusCode()).isEqualTo(200);
         var body = json.readTree(response.body());
         assertThat(body.path("mlState").asText()).isEqualTo("ready");
@@ -113,16 +114,32 @@ class ForecastComparisonIT extends IntegrationTest {
         long predictedMoney = 0;
         var expertPoints = body.path("expert").path("points");
         var mlPoints = body.path("ml").path("points");
+        var historyPoints = json.readTree(
+                        client.get("/api/v1/analytics/churn-chart").body())
+                .path("points");
+        BigDecimal overdueCount = BigDecimal.ZERO;
         for (int i = 0; i < mlPoints.size(); i++) {
             var point = mlPoints.get(i);
             assertThat(point.path("date")).isEqualTo(expertPoints.get(i).path("date"));
             assertThat(point.path("deletions")).isEqualTo(expertPoints.get(i).path("deletions"));
+            assertThat(point.path("overdueNonRenewals"))
+                    .isEqualTo(expertPoints.get(i).path("overdueNonRenewals"));
+            assertThat(point.path("overdueLossAmount"))
+                    .isEqualTo(expertPoints.get(i).path("overdueLossAmount"));
+            assertThat(point.path("overdueNonRenewals"))
+                    .isEqualTo(historyPoints.get(i).path("overdueNonRenewals"));
+            assertThat(point.path("overdueLossAmount"))
+                    .isEqualTo(historyPoints.get(i).path("overdueLossAmount"));
+            if (!point.path("overdueNonRenewals").isNull()) {
+                overdueCount = overdueCount.add(point.path("overdueNonRenewals").decimalValue());
+            }
             if (!point.path("expectedNonRenewals").isNull()) {
                 predictedCount =
                         predictedCount.add(point.path("expectedNonRenewals").decimalValue());
                 predictedMoney += point.path("expectedLossAmount").asLong();
             }
         }
+        assertThat(overdueCount).isGreaterThan(BigDecimal.ZERO);
         assertThat(predictedCount)
                 .isEqualByComparingTo(BigDecimal.valueOf(received.size()).multiply(new BigDecimal("0.8")));
         long faceValue = received.stream()

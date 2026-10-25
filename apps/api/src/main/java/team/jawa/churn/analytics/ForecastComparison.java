@@ -26,7 +26,9 @@ public class ForecastComparison {
             Integer deletionsEstimated,
             Integer servicesAtRisk,
             BigDecimal expectedNonRenewals,
-            Long expectedLossAmount) {}
+            Long expectedLossAmount,
+            BigDecimal overdueNonRenewals,
+            Long overdueLossAmount) {}
 
     public record Chart(OffsetDateTime asOf, int horizonDays, List<Point> points) {}
 
@@ -190,7 +192,9 @@ public class ForecastComparison {
                                             ? money.getOrDefault(point.date(), BigDecimal.ZERO)
                                                     .setScale(0, RoundingMode.HALF_UP)
                                                     .longValueExact()
-                                            : null);
+                                            : null,
+                                    point.overdueNonRenewals(),
+                                    point.overdueLossAmount());
                         })
                         .toList());
     }

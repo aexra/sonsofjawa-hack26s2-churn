@@ -29,7 +29,10 @@ export function ChurnChart() {
     1,
     ...[...(data?.expert.points ?? []), ...(data?.ml?.points ?? [])].map(
       (point) =>
-        (point.deletions ?? 0) + (point.deletionsEstimated ?? 0) + (point.expectedNonRenewals ?? 0),
+        (point.deletions ?? 0) +
+        (point.deletionsEstimated ?? 0) +
+        (point.expectedNonRenewals ?? 0) +
+        (point.overdueNonRenewals ?? 0),
     ),
   );
   const panels = mode === 'compare' ? (['expert', 'ml'] as const) : ([mode] as const);
@@ -86,6 +89,7 @@ export function ChurnChart() {
       <p className="m-0 text-caption text-ink-muted">
         ближайшее продление каждой услуги · только будущие платежи · суммы по графику оплаты
         {mode === 'compare' && ' · общая шкала для двух моделей'}
+        {mode !== 'expert' && ' · история и просрочки общие, меняется будущий прогноз'}
       </p>
       {mode !== 'expert' && data?.provenance === 'synthetic' && (
         <p className="m-0 text-caption text-warning">

@@ -19,6 +19,12 @@ export function ChartTooltip({
   if (row.deletionsEstimated !== undefined) {
     lines.push([text.estimated, formatInt(row.deletionsEstimated)]);
   }
+  if (row.overdueNonRenewals !== undefined) {
+    lines.push([text.overdue, decimal.format(row.overdueNonRenewals)]);
+  }
+  if (row.overdueLossAmount !== undefined) {
+    lines.push([text.overdueLoss, formatMoney(row.overdueLossAmount)]);
+  }
   if (row.expectedNonRenewals !== undefined) {
     lines.push([forecastLabel ?? text.forecast, decimal.format(row.expectedNonRenewals)]);
   }

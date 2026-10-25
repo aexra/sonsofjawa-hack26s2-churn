@@ -830,6 +830,8 @@ export interface components {
             servicesAtRisk?: number | null;
             expectedNonRenewals?: number | null;
             expectedLossAmount?: number | null;
+            overdueNonRenewals?: number | null;
+            overdueLossAmount?: number | null;
         };
         ModelSetting: {
             key: string;

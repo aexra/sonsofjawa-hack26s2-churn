@@ -20,6 +20,7 @@ import { ChartLegend } from './chart-legend';
 import { ChartTooltip } from './chart-tooltip';
 import { ForecastPattern } from './forecast-pattern';
 import { NowBadge } from './now-badge';
+import { OverduePattern } from './overdue-pattern';
 
 import type { ChurnChart as Chart } from '@/entities/analytics';
 
@@ -47,6 +48,7 @@ export function ForecastPlot({
   title: string;
 }) {
   const patternId = `forecast-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const overduePatternId = `overdue-${patternId.slice('forecast-'.length)}`;
   const rows = useMemo(() => toChartRows(chart.points), [chart]);
   const reducedMotion = useSyncExternalStore(subscribeMotion, reducedMotionSnapshot, () => true);
   const text = ru.overview.chart;
@@ -62,6 +64,7 @@ export function ForecastPlot({
           <ComposedChart data={rows} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
             <defs>
               <ForecastPattern id={patternId} />
+              <OverduePattern id={overduePatternId} />
             </defs>
             <CartesianGrid vertical={false} stroke="var(--ca-chart-grid)" />
             <XAxis
@@ -111,6 +114,19 @@ export function ForecastPlot({
             />
             <Bar
               yAxisId={COUNT_AXIS}
+              dataKey="overdueNonRenewals"
+              name={text.overdue}
+              stackId="day"
+              radius={[2, 2, 0, 0]}
+              className="series-overdue"
+              fill={`url(#${overduePatternId})`}
+              stroke="var(--ca-chart-overdue)"
+              isAnimationActive={!reducedMotion}
+              animationDuration={650}
+              animationEasing="ease-out"
+            />
+            <Bar
+              yAxisId={COUNT_AXIS}
               dataKey="expectedNonRenewals"
               name={text.forecast}
               stackId="day"
@@ -148,7 +164,11 @@ export function ForecastPlot({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <ChartLegend patternId={patternId} source={source} />
+      <ChartLegend
+        forecastPatternId={patternId}
+        overduePatternId={overduePatternId}
+        source={source}
+      />
     </figure>
   );
 }

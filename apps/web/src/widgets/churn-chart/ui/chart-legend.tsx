@@ -1,12 +1,15 @@
 import { ru } from '@/shared/i18n/ru';
 
 import { ForecastPattern } from './forecast-pattern';
+import { OverduePattern } from './overdue-pattern';
 
 export function ChartLegend({
-  patternId,
+  forecastPatternId,
+  overduePatternId,
   source = 'expert',
 }: {
-  patternId: string;
+  forecastPatternId: string;
+  overduePatternId: string;
   source?: 'expert' | 'ml';
 }) {
   const text = ru.overview.chart;
@@ -27,13 +30,31 @@ export function ChartLegend({
       <li className="inline-flex items-center gap-1.5">
         <svg aria-hidden="true" viewBox="0 0 14 10" className="h-2.5 w-3.5">
           <defs>
-            <ForecastPattern id={`${patternId}-legend`} />
+            <OverduePattern id={`${overduePatternId}-legend`} />
+          </defs>
+          <rect width={14} height={10} rx={2} fill={`url(#${overduePatternId}-legend)`} />
+          <rect
+            x={0.5}
+            y={0.5}
+            width={13}
+            height={9}
+            rx={2}
+            fill="none"
+            stroke="var(--ca-chart-overdue)"
+          />
+        </svg>
+        {text.overdue}
+      </li>
+      <li className="inline-flex items-center gap-1.5">
+        <svg aria-hidden="true" viewBox="0 0 14 10" className="h-2.5 w-3.5">
+          <defs>
+            <ForecastPattern id={`${forecastPatternId}-legend`} />
           </defs>
           <rect
             width={14}
             height={10}
             rx={2}
-            fill={source === 'ml' ? 'var(--ca-risk-low)' : `url(#${patternId}-legend)`}
+            fill={source === 'ml' ? 'var(--ca-risk-low)' : `url(#${forecastPatternId}-legend)`}
           />
           <rect
             x={0.5}

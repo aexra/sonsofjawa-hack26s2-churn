@@ -43,6 +43,26 @@ describe('computePreview', () => {
     expect(preview?.rows.map((row) => row.levelAfter)).toEqual(['medium', 'medium']);
   });
 
+  it('lists nobody when the draft does not change scores or levels', () => {
+    const drifted = customers.map((customer) => ({
+      ...customer,
+      riskScore: customer.riskScore + 0.37,
+    }));
+    const preview = computePreview(drifted, settings, { ...saved });
+    expect(preview?.rows).toEqual([]);
+    expect(preview?.levelChanges).toBe(0);
+  });
+
+  it('lists only customers whose level moves when only a threshold changes', () => {
+    const drifted = customers.map((customer) => ({
+      ...customer,
+      riskScore: customer.riskScore + 0.37,
+    }));
+    const preview = computePreview(drifted, settings, { ...saved, level_high: 60 });
+    expect(preview?.rows.map((row) => row.id)).toEqual([9, 10]);
+    expect(preview?.levelChanges).toBe(2);
+  });
+
   it('returns nothing for an unusable draft', () => {
     expect(
       computePreview(customers, settings, { ...saved, weight_prolong_wait: Number.NaN }),
